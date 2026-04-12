@@ -272,7 +272,7 @@
         }
 
         .panel-title {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-secondary);
             text-transform: uppercase;
@@ -296,9 +296,9 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 12px;
+            padding: 8px 16px;
             border-radius: 20px;
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 600;
         }
 
@@ -338,12 +338,12 @@
         }
 
         .data-label {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--text-secondary);
         }
 
         .data-value {
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 500;
             font-family: 'Roboto Mono', monospace;
         }
@@ -367,7 +367,7 @@
         }
 
         .signal-type {
-            font-size: 14px;
+            font-size: 18px;
             font-weight: 600;
         }
 
@@ -376,7 +376,7 @@
         .signal-type.hold { color: var(--warning-color); }
 
         .signal-score {
-            font-size: 28px;
+            font-size: 36px;
             font-weight: 700;
             font-family: 'Roboto Mono', monospace;
         }
@@ -420,14 +420,14 @@
         }
 
         .price-level-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             margin-bottom: 4px;
         }
 
         .price-level-value {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 600;
             font-family: 'Roboto Mono', monospace;
         }
@@ -444,8 +444,8 @@
             display: flex;
             align-items: flex-start;
             gap: 8px;
-            padding: 8px 0;
-            font-size: 12px;
+            padding: 10px 0;
+            font-size: 14px;
             color: var(--text-secondary);
         }
 
@@ -604,6 +604,7 @@
             <div class="chart-container">
                 <div class="chart-controls">
                     <button class="control-btn active" id="toggleGMMA">GMMA</button>
+                    <button class="control-btn active" id="toggleCross">金叉死叉</button>
                     <button class="control-btn active" id="togglePinBar">Pin Bar</button>
                     <button class="control-btn active" id="toggleEngulfing">吞没</button>
                     <button class="control-btn active" id="toggleMarkers">标记</button>
@@ -1095,6 +1096,21 @@
             });
         }
 
+        // 添加金叉死叉标记
+        function addCrossMarkers(crosses) {
+            const markers = [];
+            crosses.forEach(cross => {
+                markers.push({
+                    time: cross.time,
+                    position: cross.type === 'golden' ? 'belowBar' : 'aboveBar',
+                    color: cross.type === 'golden' ? '#FFD700' : '#FF4081',
+                    shape: cross.type === 'golden' ? 'arrowUp' : 'arrowDown',
+                    text: cross.type === 'golden' ? '金叉' : '死叉',
+                });
+            });
+            return markers;
+        }
+
         // ========== 价格行为模式 ==========
         function identifyPinBar(c) {
             const body = Math.abs(c.close - c.open);
@@ -1138,7 +1154,7 @@
             return patterns;
         }
 
-        function addMarkers(patterns) {
+        function addMarkers(patterns, crosses = []) {
             const markers = [];
             if (document.getElementById('togglePinBar').classList.contains('active')) {
                 patterns.pinBars.forEach(pb => {
@@ -1148,6 +1164,18 @@
             if (document.getElementById('toggleEngulfing').classList.contains('active')) {
                 patterns.engulfings.forEach(e => {
                     markers.push({ time: e.current.time, position: e.type === 'bullish' ? 'belowBar' : 'aboveBar', color: '#9C27B0', shape: e.type === 'bullish' ? 'arrowUp' : 'arrowDown', text: e.type === 'bullish' ? '吞↑' : '吞↓' });
+                });
+            }
+            // 添加金叉死叉标记
+            if (document.getElementById('toggleCross').classList.contains('active')) {
+                crosses.forEach(cross => {
+                    markers.push({
+                        time: cross.time,
+                        position: cross.type === 'golden' ? 'belowBar' : 'aboveBar',
+                        color: cross.type === 'golden' ? '#FFD700' : '#FF4081',
+                        shape: cross.type === 'golden' ? 'arrowUp' : 'arrowDown',
+                        text: cross.type === 'golden' ? '金叉' : '死叉',
+                    });
                 });
             }
             markers.sort((a, b) => a.time - b.time);
@@ -1160,7 +1188,7 @@
 
         // ========== GMMA分析 ==========
         function analyzeGMMA(data) {
-            if (data.length < 60) return { trend: 'neutral', confidence: 0, details: '数据不足' };
+            if (data.length < 60) return { trend: 'neutral', confidence: 0, details: '数据不足', crosses: [] };
 
             const shortEmas = GMMA_SHORT.map(p => calcEMA(data, p));
             const longEmas = GMMA_LONG.map(p => calcEMA(data, p));
@@ -1173,6 +1201,24 @@
             const longVals = longEmas.map(e => e[last] || 0);
             const shortSpread = ((Math.max(...shortVals) - Math.min(...shortVals)) / shortAvg * 100).toFixed(2);
             const longSpread = ((Math.max(...longVals) - Math.min(...longVals)) / longAvg * 100).toFixed(2);
+
+            // 检测金叉死叉（短期组与长期组交叉）
+            const crosses = [];
+            for (let i = 60; i < data.length; i++) {
+                const prevShortAvg = shortEmas.reduce((s, e) => s + (e[i - 1] || 0), 0) / GMMA_SHORT.length;
+                const prevLongAvg = longEmas.reduce((s, e) => s + (e[i - 1] || 0), 0) / GMMA_LONG.length;
+                const currShortAvg = shortEmas.reduce((s, e) => s + (e[i] || 0), 0) / GMMA_SHORT.length;
+                const currLongAvg = longEmas.reduce((s, e) => s + (e[i] || 0), 0) / GMMA_LONG.length;
+
+                // 金叉：短期组从下向上穿越长期组
+                if (prevShortAvg <= prevLongAvg && currShortAvg > currLongAvg) {
+                    crosses.push({ type: 'golden', time: data[i].time, index: i });
+                }
+                // 死叉：短期组从上向下穿越长期组
+                if (prevShortAvg >= prevLongAvg && currShortAvg < currLongAvg) {
+                    crosses.push({ type: 'death', time: data[i].time, index: i });
+                }
+            }
 
             let trend = 'neutral', confidence = 0, details = '';
             if (shortAvg > longAvg * 1.02) {
@@ -1187,7 +1233,15 @@
                 details = `短期组与长期组接近，震荡`;
             }
 
-            return { trend, confidence: Math.round(confidence), shortAvg, longAvg, shortSpread, longSpread, details };
+            // 添加最近的金叉死叉信息
+            const recentCrosses = crosses.slice(-3);
+            if (recentCrosses.length > 0) {
+                const lastCross = recentCrosses[recentCrosses.length - 1];
+                const crossDate = new Date(lastCross.time * 1000).toLocaleDateString();
+                details += `，最近${lastCross.type === 'golden' ? '金叉' : '死叉'}: ${crossDate}`;
+            }
+
+            return { trend, confidence: Math.round(confidence), shortAvg, longAvg, shortSpread, longSpread, details, crosses };
         }
 
         // ========== 综合信号 ==========
@@ -1291,21 +1345,27 @@
             const url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},day,,,100`;
             console.log('[腾讯] 请求:', url);
             
-            const resp = await fetch(url);
-            const data = await resp.json();
-            const klines = data.data?.[`${prefix}${code}`]?.day || [];
-            
-            if (klines.length === 0) throw new Error('腾讯API返回空数据');
-            
-            console.log('[腾讯] 数据条数:', klines.length);
-            return klines.map(k => ({
-                time: dateToTimestamp(k[0]),
-                open: parseFloat(k[1]),
-                close: parseFloat(k[2]),
-                high: parseFloat(k[3]),
-                low: parseFloat(k[4]),
-                volume: parseFloat(k[5]) || 0
-            }));
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const klines = data.data?.[`${prefix}${code}`]?.day || [];
+                
+                if (klines.length === 0) throw new Error('腾讯API返回空数据');
+                
+                console.log('[腾讯] 数据条数:', klines.length);
+                return klines.map(k => ({
+                    time: dateToTimestamp(k[0]),
+                    open: parseFloat(k[1]),
+                    close: parseFloat(k[2]),
+                    high: parseFloat(k[3]),
+                    low: parseFloat(k[4]),
+                    volume: parseFloat(k[5]) || 0
+                }));
+            } catch (e) {
+                console.error('[腾讯] 错误:', e);
+                throw e;
+            }
         }
 
         // 东方财富API（备用）
@@ -1444,9 +1504,9 @@
                 updateIndicators(result.data);
 
                 const patterns = analyzePatterns(result.data);
-                addMarkers(patterns);
-
                 const gmma = analyzeGMMA(result.data);
+                addMarkers(patterns, gmma.crosses || []);
+
                 const signal = generateSignal(patterns, gmma, result.data);
 
                 updateUI(result.data, patterns, gmma, signal, result.source);
@@ -1480,13 +1540,15 @@
             });
         });
 
-        ['toggleGMMA', 'togglePinBar', 'toggleEngulfing', 'toggleMarkers'].forEach(id => {
+        ['toggleGMMA', 'togglePinBar', 'toggleEngulfing', 'toggleMarkers', 'toggleCross'].forEach(id => {
             document.getElementById(id).addEventListener('click', function() {
                 this.classList.toggle('active');
                 if (id === 'toggleGMMA') {
                     gmmaSeries.forEach(({ series }) => series.applyOptions({ visible: this.classList.contains('active') }));
                 } else if (currentData.length > 0) {
-                    addMarkers(analyzePatterns(currentData));
+                    const patterns = analyzePatterns(currentData);
+                    const gmma = analyzeGMMA(currentData);
+                    addMarkers(patterns, gmma.crosses || []);
                 }
             });
         });
