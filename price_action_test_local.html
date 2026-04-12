@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K线测试页（本地API）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: #0f0f1a; color: #e0e0e0; padding: 16px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+  input { background: #1e1e2e; border: 1px solid #333; color: #fff; padding: 8px 12px; border-radius: 6px; width: 160px; font-size: 14px; }
+  select { background: #1e1e2e; border: 1px solid #333; color: #fff; padding: 8px; border-radius: 6px; font-size: 14px; }
+  button { background: #3b82f6; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button:hover { background: #2563eb; }
+  #chart { width: 100%; height: 480px; border-radius: 8px; overflow: hidden; background: #13131f; }
+  #status { margin-top: 10px; font-size: 13px; color: #888; min-height: 20px; }
+  #status.ok { color: #4ade80; }
+  #status.err { color: #f87171; }
+  .badge { background: #374151; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <input id="codeInput" value="600519" placeholder="股票代码，如 600519">
+  <select id="periodSelect">
+    <option value="day">日K</option>
+    <option value="week">周K</option>
+    <option value="month">月K</option>
+  </select>
+  <button onclick="loadChart()">加载K线</button>
+  <span id="sourceBadge" class="badge" style="display:none">数据源：—</span>
+</div>
+
+<div id="chart"></div>
+<div id="status">输入代码后点击「加载K线」</div>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+let chart, candleSeries, volumeSeries;
+const API = "http://localhost:3845";
+
+function initChart() {
+  chart = LightweightCharts.createChart(document.getElementById("chart"), {
+    width: document.getElementById("chart").clientWidth,
+    height: 480,
+    layout: { background: "#13131f", textColor: "#888" },
+    grid: { vertLines: { color: "#222" }, horzLines: { color: "#222" } },
+    crosshair: { mode: 1 },
+    timeScale: { borderColor: "#333", timeVisible: true },
+    rightPriceScale: { borderColor: "#333" },
+  });
+
+  candleSeries = chart.addCandlestickSeries({
+    upColor: "#26a69a", downColor: "#ef5350",
+    borderUpColor: "#26a69a", borderDownColor: "#ef5350",
+    wickUpColor: "#26a69a", wickDownColor: "#ef5350",
+  });
+
+  volumeSeries = chart.addHistogramSeries({
+    color: "#26a69a", priceFormat: { type: "volume" },
+    priceScaleId: "", scaleMargins: { top: 0.8, bottom: 0 },
+  });
+
+  window.addEventListener("resize", () => {
+    chart.applyOptions({ width: document.getElementById("chart").clientWidth });
+  });
+}
+
+async function loadChart() {
+  const code = document.getElementById("codeInput").value.trim().replace(/^sh|^sz/i, "");
+  const period = document.getElementById("periodSelect").value;
+  const statusEl = document.getElementById("status");
+  const badgeEl = document.getElementById("sourceBadge");
+
+  if (!code) { statusEl.textContent = "请输入股票代码"; return; }
+
+  statusEl.textContent = "正在加载...";
+  statusEl.className = "";
+  badgeEl.style.display = "none";
+
+  try {
+    const resp = await fetch(`${API}/kline?code=${code}&period=${period}&count=100`);
+    const json = await resp.json();
+
+    if (json.code !== 0 || !json.data || json.data.length === 0) {
+      throw new Error(json.error || "数据为空");
+    }
+
+    const candles = json.data.map(d => ({
+      time: d.time,
+      open: d.open, high: d.high, low: d.low, close: d.close,
+    }));
+
+    const volumes = json.data.map(d => ({
+      time: d.time,
+      value: d.volume,
+      color: d.close >= d.open ? "rgba(38,166,154,0.4)" : "rgba(239,83,80,0.4)",
+    }));
+
+    if (!chart) initChart();
+    candleSeries.setData(candles);
+    volumeSeries.setData(volumes);
+    chart.timeScale().fitContent();
+
+    badgeEl.textContent = "数据源：" + json.source;
+    badgeEl.style.display = "inline";
+
+    statusEl.textContent = "✓ 加载成功，共 " + candles.length + " 条K线";
+    statusEl.className = "ok";
+
+  } catch (e) {
+    statusEl.textContent = "✗ 加载失败：" + e.message;
+    statusEl.className = "err";
+  }
+}
+
+document.getElementById("codeInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") loadChart();
+});
+
+initChart();
+loadChart();
+</script>
+</body>
+</html>
