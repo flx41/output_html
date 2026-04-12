@@ -1280,8 +1280,8 @@
             // 格式: "2025-11-11" 或 "20251111"
             const normalized = dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
             const parts = normalized.split('-');
-            // 使用本地时间创建日期
-            const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            // 使用UTC时间创建日期，避免时区问题
+            const date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
             return Math.floor(date.getTime() / 1000);
         }
 
@@ -1393,8 +1393,24 @@
                     console.log(`[数据源] 尝试: ${s.name}`);
                     const data = await s.fn(code);
                     if (data && data.length > 0) {
-                        console.log(`[数据源] ✅ ${s.name} 成功, ${data.length}条`);
-                        return { data, source: s.name };
+                        // 验证数据格式
+                        const validData = data.filter(d => 
+                            d.time && 
+                            typeof d.open === 'number' && !isNaN(d.open) &&
+                            typeof d.high === 'number' && !isNaN(d.high) &&
+                            typeof d.low === 'number' && !isNaN(d.low) &&
+                            typeof d.close === 'number' && !isNaN(d.close)
+                        );
+                        
+                        if (validData.length < 10) {
+                            throw new Error('有效数据不足');
+                        }
+                        
+                        // 按时间排序
+                        validData.sort((a, b) => a.time - b.time);
+                        
+                        console.log(`[数据源] ✅ ${s.name} 成功, ${validData.length}条`);
+                        return { data: validData, source: s.name };
                     }
                 } catch (e) {
                     console.log(`[数据源] ❌ ${s.name} 失败: ${e.message}`);
