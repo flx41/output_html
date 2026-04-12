@@ -838,7 +838,13 @@
 
             // 同步两个图表的时间轴
             chart.timeScale().subscribeVisibleTimeRangeChange(timeRange => {
-                if (timeRange) indicatorChart.timeScale().setVisibleRange(timeRange);
+                if (timeRange && timeRange.from && timeRange.to) {
+                    try {
+                        indicatorChart.timeScale().setVisibleRange(timeRange);
+                    } catch (e) {
+                        // 忽略同步错误
+                    }
+                }
             });
 
             // 响应式
