@@ -1360,39 +1360,218 @@
             document.getElementById('dojiCount').textContent = patterns.dojis.length;
         }
 
-        // ========== 数据获取（本地API）==========
+        // ========== 数据获取 ==========
+        
+        // CORS代理列表（免费公共代理）
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/',
+        ];
+        
+        // 当前使用的代理索引
+        let currentProxyIndex = 0;
+        
+        // 获取带代理的URL
+        function getProxiedUrl(url) {
+            return CORS_PROXIES[currentProxyIndex] + encodeURIComponent(url);
+        }
+        
+        // 切换到下一个代理
+        function switchProxy() {
+            currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+            console.log(`[代理] 切换到: ${CORS_PROXIES[currentProxyIndex]}`);
+        }
+        
+        // 日期转时间戳（处理时区问题）
+        function dateToTimestamp(dateStr) {
+            // 格式: "2025-11-11" 或 "20251111"
+            const normalized = dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+            const parts = normalized.split('-');
+            // 使用UTC时间创建日期，避免时区问题
+            const date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+            return Math.floor(date.getTime() / 1000);
+        }
 
-        // 本地K线API
-        async function fetchData(code, period = 'day') {
-            const url = `http://localhost:3845/kline?code=${code}&period=${period}&count=100`;
-
+        // 带代理的fetch
+        async function fetchWithProxy(url, options = {}) {
+            // 先尝试直接请求
             try {
-                console.log('[本地API] 请求:', url);
-                const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-                const json = await resp.json();
-
-                if (json.code !== 0 || !json.data || json.data.length === 0) {
-                    throw new Error(json.msg || '本地API返回空数据');
-                }
-
-                const data = json.data.map(d => ({
-                    time: d.time,
-                    open: d.open,
-                    close: d.close,
-                    high: d.high,
-                    low: d.low,
-                    volume: d.volume || 0
-                }));
-
-                // 按时间排序
-                data.sort((a, b) => a.time - b.time);
-
-                console.log(`[本地API] ✅ 成功, ${data.length}条`);
-                return { data, source: '本地API (baostock)' };
+                const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
+                if (resp.ok) return resp;
             } catch (e) {
-                console.error('[本地API] ❌ 失败:', e.message);
-                throw new Error(`数据获取失败: ${e.message}。请确保 kline_api_server.py 已启动。`);
+                console.log('[代理] 直接请求失败，尝试代理...');
             }
+            
+            // 尝试每个代理
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxyUrl = getProxiedUrl(url);
+                    console.log(`[代理] 尝试: ${proxyUrl.substring(0, 50)}...`);
+                    const resp = await fetch(proxyUrl, { ...options, signal: AbortSignal.timeout(8000) });
+                    if (resp.ok) {
+                        console.log('[代理] 成功');
+                        return resp;
+                    }
+                } catch (e) {
+                    console.log(`[代理] 失败: ${e.message}`);
+                    switchProxy();
+                }
+            }
+            
+            throw new Error('所有代理都失败');
+        }
+
+        // 腾讯API（主要）
+        async function fetchTencent(code, period = 'day') {
+            const prefix = code.startsWith('6') ? 'sh' : 'sz';
+            const url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},${period},,,100`;
+            console.log('[腾讯] 请求:', url);
+            
+            try {
+                const resp = await fetchWithProxy(url);
+                const data = await resp.json();
+                // 按周期取对应字段：day/week/month
+                const klines = data.data?.[`${prefix}${code}`]?.[period] || [];
+                
+                if (klines.length === 0) throw new Error('腾讯API返回空数据');
+                
+                console.log('[腾讯] 数据条数:', klines.length);
+                return klines.map(k => ({
+                    time: dateToTimestamp(k[0]),
+                    open: parseFloat(k[1]),
+                    close: parseFloat(k[2]),
+                    high: parseFloat(k[3]),
+                    low: parseFloat(k[4]),
+                    volume: parseFloat(k[5]) || 0
+                }));
+            } catch (e) {
+                console.error('[腾讯] 错误:', e);
+                throw e;
+            }
+        }
+
+        // 东方财富API（JSONP方式，不受CORS限制）
+        function fetchEastMoney(code, period = 'day') {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'emCallback_' + Date.now();
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    if (script.parentNode) script.parentNode.removeChild(script);
+                    
+                    if (data?.data?.klines) {
+                        const klines = data.data.klines.map(kline => {
+                            const [date, open, close, high, low, volume] = kline.split(',');
+                            return {
+                                time: dateToTimestamp(date),
+                                open: parseFloat(open),
+                                close: parseFloat(close),
+                                high: parseFloat(high),
+                                low: parseFloat(low),
+                                volume: parseFloat(volume) || 0
+                            };
+                        });
+                        console.log('[东方财富] 数据条数:', klines.length);
+                        resolve(klines);
+                    } else {
+                        reject(new Error('东方财富API数据格式异常'));
+                    }
+                };
+                
+                // 周期参数: 101=日K, 102=周K, 103=月K
+                const klt = period === 'week' ? 102 : period === 'month' ? 103 : 101;
+                const secid = code.startsWith('6') ? `1.${code}` : `0.${code}`;
+                const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=100&cb=${callbackName}`;
+                
+                console.log('[东方财富] 请求:', url);
+                
+                const script = document.createElement('script');
+                script.src = url;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    reject(new Error('东方财富API加载失败'));
+                };
+                document.head.appendChild(script);
+                
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        if (script.parentNode) script.parentNode.removeChild(script);
+                        reject(new Error('东方财富API请求超时'));
+                    }
+                }, 10000);
+            });
+        }
+
+        // 新浪API（备用）
+        async function fetchSina(code, period = 'day') {
+            const prefix = code.startsWith('6') ? 'sh' : 'sz';
+            // scale参数: 240=日K, 1680=周K, 7200=月K
+            const scale = period === 'week' ? 1680 : period === 'month' ? 7200 : 240;
+            const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=${scale}&ma=no&datalen=100`;
+            
+            try {
+                const resp = await fetchWithProxy(url);
+                const text = await resp.text();
+                const data = JSON.parse(text);
+                
+                // 新浪返回数组，如果不是数组则跳过
+                if (!Array.isArray(data)) throw new Error('新浪API返回格式异常');
+                
+                return data.map(k => ({
+                    time: dateToTimestamp(k.day),
+                    open: parseFloat(k.open),
+                    close: parseFloat(k.close),
+                    high: parseFloat(k.high),
+                    low: parseFloat(k.low),
+                    volume: parseFloat(k.volume) || 0
+                }));
+            } catch (e) {
+                throw e;
+            }
+        }
+
+        async function fetchData(code, period = 'day') {
+            const sources = [
+                { name: '东方财富', fn: fetchEastMoney },  // JSONP，最可靠
+                { name: '腾讯', fn: fetchTencent },
+                { name: '新浪', fn: fetchSina },
+            ];
+            
+            let lastError = null;
+            
+            for (const s of sources) {
+                try {
+                    console.log(`[数据源] 尝试: ${s.name}`);
+                    const data = await s.fn(code, period);
+                    if (data && data.length > 0) {
+                        // 验证数据格式
+                        const validData = data.filter(d => 
+                            d.time && 
+                            typeof d.open === 'number' && !isNaN(d.open) &&
+                            typeof d.high === 'number' && !isNaN(d.high) &&
+                            typeof d.low === 'number' && !isNaN(d.low) &&
+                            typeof d.close === 'number' && !isNaN(d.close)
+                        );
+                        
+                        if (validData.length < 10) {
+                            throw new Error('有效数据不足');
+                        }
+                        
+                        // 按时间排序
+                        validData.sort((a, b) => a.time - b.time);
+                        
+                        console.log(`[数据源] ✅ ${s.name} 成功, ${validData.length}条`);
+                        return { data: validData, source: s.name };
+                    }
+                } catch (e) {
+                    console.log(`[数据源] ❌ ${s.name} 失败: ${e.message}`);
+                    lastError = e;
+                }
+            }
+            
+            throw new Error(`所有数据源失败: ${lastError?.message || '未知错误'}`);
         }
 
         // ========== 查询 ==========
