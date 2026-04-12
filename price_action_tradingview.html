@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>价格行为学 + 顾比均线 | TradingView风格</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #131722;
+            --bg-secondary: #1e222d;
+            --bg-tertiary: #2a2e39;
+            --border-color: #363a45;
+            --text-primary: #d1d4dc;
+            --text-secondary: #787b86;
+            --text-muted: #5d606a;
+            --accent-blue: #2962ff;
+            --accent-blue-light: #4a8aff;
+            --up-color: #26a69a;
+            --down-color: #ef5350;
+            --warning-color: #ff9800;
+            --card-radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* 顶部导航栏 */
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .navbar-brand {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .navbar-brand span {
+            color: var(--accent-blue);
+        }
+
+        /* 搜索区域 */
+        .search-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            max-width: 500px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--accent-blue-light);
+        }
+
+        .btn:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        /* 时间周期选择 */
+        .timeframe-tabs {
+            display: flex;
+            gap: 2px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            padding: 2px;
+        }
+
+        .timeframe-tab {
+            padding: 6px 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .timeframe-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .timeframe-tab.active {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        /* 主布局 */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 52px);
+        }
+
+        /* 左侧图表区域 */
+        .chart-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            gap: 8px;
+        }
+
+        /* 股票信息栏 */
+        .stock-header {
+            background: var(--bg-secondary);
+            border-radius: var(--card-radius);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stock-name {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .stock-price {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .stock-price.up { color: var(--up-color); }
+        .stock-price.down { color: var(--down-color); }
+
+        .stock-change {
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .stock-change.up {
+            background: rgba(38, 166, 154, 0.2);
+            color: var(--up-color);
+        }
+
+        .stock-change.down {
+            background: rgba(239, 83, 80, 0.2);
+            color: var(--down-color);
+        }
+
+        .stock-meta {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 图表容器 */
+        .chart-container {
+            flex: 1;
+            background: var(--bg-secondary);
+            border-radius: var(--card-radius);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 图表控制栏 */
+        .chart-controls {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            display: flex;
+            gap: 4px;
+            z-index: 10;
+        }
+
+        .control-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .control-btn.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        /* 右侧面板 */
+        .side-panel {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .panel-title::before {
+            content: '';
+            width: 3px;
+            height: 12px;
+            background: var(--accent-blue);
+            border-radius: 2px;
+        }
+
+        /* 趋势指示器 */
+        .trend-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .trend-badge.bullish {
+            background: rgba(38, 166, 154, 0.15);
+            color: var(--up-color);
+        }
+
+        .trend-badge.bearish {
+            background: rgba(239, 83, 80, 0.15);
+            color: var(--down-color);
+        }
+
+        .trend-badge.neutral {
+            background: rgba(255, 152, 0, 0.15);
+            color: var(--warning-color);
+        }
+
+        .trend-icon {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* 数据行 */
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(54, 58, 69, 0.5);
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .data-value {
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .data-value.up { color: var(--up-color); }
+        .data-value.down { color: var(--down-color); }
+
+        /* 信号卡片 */
+        .signal-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--card-radius);
+            padding: 16px;
+            margin-top: 8px;
+        }
+
+        .signal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .signal-type {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .signal-type.buy { color: var(--up-color); }
+        .signal-type.sell { color: var(--down-color); }
+        .signal-type.hold { color: var(--warning-color); }
+
+        .signal-score {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .signal-score.high { color: var(--up-color); }
+        .signal-score.medium { color: var(--warning-color); }
+        .signal-score.low { color: var(--down-color); }
+
+        /* 得分条 */
+        .score-bar {
+            height: 4px;
+            background: var(--bg-primary);
+            border-radius: 2px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .score-fill.positive { background: var(--up-color); }
+        .score-fill.negative { background: var(--down-color); }
+        .score-fill.neutral { background: var(--warning-color); }
+
+        /* 关键价位 */
+        .price-levels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .price-level {
+            background: var(--bg-primary);
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .price-level-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .price-level-value {
+            font-size: 16px;
+            font-weight: 600;
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .price-level.support .price-level-value { color: var(--up-color); }
+        .price-level.resistance .price-level-value { color: var(--down-color); }
+
+        /* 分析列表 */
+        .analysis-list {
+            margin-top: 12px;
+        }
+
+        .analysis-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 0;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .analysis-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .analysis-icon.bullish {
+            background: rgba(38, 166, 154, 0.2);
+            color: var(--up-color);
+        }
+
+        .analysis-icon.bearish {
+            background: rgba(239, 83, 80, 0.2);
+            color: var(--down-color);
+        }
+
+        .analysis-icon.neutral {
+            background: rgba(255, 152, 0, 0.2);
+            color: var(--warning-color);
+        }
+
+        /* 图例 */
+        .legend-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+        }
+
+        /* Loading */
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* 常用股票 */
+        .watchlist {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .watchlist-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .watchlist-item:hover {
+            border-color: var(--accent-blue);
+            color: var(--text-primary);
+        }
+
+        .watchlist-item.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            📊 <span>Stock</span>Analyzer
+        </div>
+        
+        <div class="search-bar">
+            <input type="text" class="search-input" id="stockCode" placeholder="输入股票代码 (如: 600519)" value="600519">
+            <div class="timeframe-tabs">
+                <button class="timeframe-tab active" data-period="day">日K</button>
+                <button class="timeframe-tab" data-period="week">周K</button>
+                <button class="timeframe-tab" data-period="month">月K</button>
+            </div>
+            <button class="btn" id="searchBtn">查询</button>
+        </div>
+
+        <div class="watchlist">
+            <span class="watchlist-item" data-code="600519">茅台</span>
+            <span class="watchlist-item" data-code="000858">五粮液</span>
+            <span class="watchlist-item" data-code="300750">宁德</span>
+            <span class="watchlist-item" data-code="000001">平安</span>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <div class="main-container">
+        <!-- 左侧图表 -->
+        <div class="chart-area">
+            <!-- 股票信息 -->
+            <div class="stock-header">
+                <span class="stock-name" id="stockName">SH.600519</span>
+                <span class="stock-price" id="stockPrice">--</span>
+                <span class="stock-change" id="stockChange">--</span>
+                <span class="stock-meta" id="stockMeta">数据源: --</span>
+            </div>
+
+            <!-- 图表 -->
+            <div class="chart-container">
+                <div class="chart-controls">
+                    <button class="control-btn active" id="toggleGMMA">GMMA</button>
+                    <button class="control-btn active" id="togglePinBar">Pin Bar</button>
+                    <button class="control-btn active" id="toggleEngulfing">吞没</button>
+                    <button class="control-btn active" id="toggleMarkers">标记</button>
+                </div>
+                <div id="chart"></div>
+            </div>
+        </div>
+
+        <!-- 右侧面板 -->
+        <div class="side-panel">
+            <!-- GMMA趋势 -->
+            <div class="panel-section">
+                <div class="panel-title">GMMA 趋势分析</div>
+                <div id="gmmaTrend">
+                    <div class="trend-badge neutral">
+                        <span class="trend-icon"></span>
+                        <span>等待数据...</span>
+                    </div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <div class="data-row">
+                        <span class="data-label">短期组均价</span>
+                        <span class="data-value" id="shortAvg">--</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">长期组均价</span>
+                        <span class="data-value" id="longAvg">--</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">趋势强度</span>
+                        <span class="data-value" id="trendStrength">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 综合信号 -->
+            <div class="panel-section">
+                <div class="panel-title">综合交易信号</div>
+                <div class="signal-card">
+                    <div class="signal-header">
+                        <span class="signal-type hold" id="signalType">观望</span>
+                        <span class="signal-score medium" id="signalScore">--</span>
+                    </div>
+                    <div class="score-bar">
+                        <div class="score-fill neutral" id="scoreFill" style="width: 50%"></div>
+                    </div>
+                    <div class="price-levels">
+                        <div class="price-level support">
+                            <div class="price-level-label">支撑位</div>
+                            <div class="price-level-value" id="supportLevel">--</div>
+                        </div>
+                        <div class="price-level resistance">
+                            <div class="price-level-label">阻力位</div>
+                            <div class="price-level-value" id="resistanceLevel">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分析依据 -->
+            <div class="panel-section">
+                <div class="panel-title">分析依据</div>
+                <div class="analysis-list" id="analysisList">
+                    <div class="analysis-item">
+                        <span class="analysis-icon neutral">•</span>
+                        <span>等待数据...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 价格行为统计 -->
+            <div class="panel-section">
+                <div class="panel-title">价格行为信号</div>
+                <div class="data-row">
+                    <span class="data-label">Pin Bar</span>
+                    <span class="data-value" id="pinBarCount">0</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">吞没形态</span>
+                    <span class="data-value" id="engulfingCount">0</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">十字星</span>
+                    <span class="data-value" id="dojiCount">0</span>
+                </div>
+            </div>
+
+            <!-- 图例 -->
+            <div class="panel-section">
+                <div class="panel-title">图例</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #26a69a"></div>
+                        <span>阳线</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #ef5350"></div>
+                        <span>阴线</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #2196F3"></div>
+                        <span>GMMA短期</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: #f44336"></div>
+                        <span>GMMA长期</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 全局变量 ==========
+        let chart = null;
+        let candlestickSeries = null;
+        let currentData = [];
+        let gmmaSeries = [];
+
+        const GMMA_SHORT = [3, 5, 8, 10, 12, 15];
+        const GMMA_LONG = [30, 35, 40, 45, 50, 60];
+
+        // ========== 图表初始化 ==========
+        function initChart() {
+            const container = document.getElementById('chart');
+            if (chart) chart.remove();
+
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#1e222d' },
+                    textColor: '#787b86',
+                },
+                grid: {
+                    vertLines: { color: '#2a2e39' },
+                    horzLines: { color: '#2a2e39' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: { color: '#5d606a' },
+                    horzLine: { color: '#5d606a' },
+                },
+                rightPriceScale: {
+                    borderColor: '#363a45',
+                },
+                timeScale: {
+                    borderColor: '#363a45',
+                    timeVisible: true,
+                },
+            });
+
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // 响应式
+            new ResizeObserver(() => {
+                chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+            }).observe(container);
+        }
+
+        // ========== EMA计算 ==========
+        function calcEMA(data, period) {
+            const ema = [];
+            const k = 2 / (period + 1);
+            let sum = 0;
+            for (let i = 0; i < period && i < data.length; i++) sum += data[i].close;
+            ema[period - 1] = sum / period;
+            for (let i = period; i < data.length; i++) {
+                ema[i] = (data[i].close - ema[i - 1]) * k + ema[i - 1];
+            }
+            return ema;
+        }
+
+        // ========== GMMA ==========
+        function initGMMA() {
+            gmmaSeries.forEach(s => chart.removeSeries(s.series));
+            gmmaSeries = [];
+
+            const shortColors = ['#1e3a5f', '#2a4a6f', '#365a7f', '#426a8f', '#4e7a9f', '#2962ff'];
+            const longColors = ['#5f1e1e', '#6f2a2a', '#7f3636', '#8f4242', '#9f4e4e', '#ef5350'];
+
+            GMMA_SHORT.forEach((p, i) => {
+                const s = chart.addLineSeries({ color: shortColors[i], lineWidth: 1, visible: document.getElementById('toggleGMMA').classList.contains('active') });
+                gmmaSeries.push({ series: s, period: p });
+            });
+            GMMA_LONG.forEach((p, i) => {
+                const s = chart.addLineSeries({ color: longColors[i], lineWidth: 1, visible: document.getElementById('toggleGMMA').classList.contains('active') });
+                gmmaSeries.push({ series: s, period: p });
+            });
+        }
+
+        function updateGMMA(data) {
+            gmmaSeries.forEach(({ series, period }) => {
+                const ema = calcEMA(data, period);
+                const lineData = [];
+                for (let i = period - 1; i < data.length; i++) {
+                    if (ema[i] !== undefined) lineData.push({ time: data[i].time, value: ema[i] });
+                }
+                series.setData(lineData);
+            });
+        }
+
+        // ========== 价格行为模式 ==========
+        function identifyPinBar(c) {
+            const body = Math.abs(c.close - c.open);
+            const range = c.high - c.low;
+            if (range === 0) return null;
+            const lower = Math.min(c.open, c.close) - c.low;
+            const upper = c.high - Math.max(c.open, c.close);
+            if (body / range < 0.3) {
+                if (lower > body * 2 && upper < body) return { type: 'bullish', candle: c };
+                if (upper > body * 2 && lower < body) return { type: 'bearish', candle: c };
+            }
+            return null;
+        }
+
+        function identifyEngulfing(cur, prev) {
+            if (!cur || !prev) return null;
+            if (cur.close > cur.open && prev.close < prev.open && cur.open <= prev.close && cur.close >= prev.open)
+                return { type: 'bullish', current: cur };
+            if (cur.close < cur.open && prev.close > prev.open && cur.open >= prev.close && cur.close <= prev.open)
+                return { type: 'bearish', current: cur };
+            return null;
+        }
+
+        function identifyDoji(c) {
+            const body = Math.abs(c.close - c.open);
+            const range = c.high - c.low;
+            return range > 0 && body / range < 0.1;
+        }
+
+        function analyzePatterns(data) {
+            const patterns = { pinBars: [], engulfings: [], dojis: [] };
+            data.forEach((c, i) => {
+                const pb = identifyPinBar(c);
+                if (pb) patterns.pinBars.push({ ...pb, index: i });
+                if (identifyDoji(c)) patterns.dojis.push({ candle: c, index: i });
+                if (i > 0) {
+                    const e = identifyEngulfing(c, data[i - 1]);
+                    if (e) patterns.engulfings.push({ ...e, index: i });
+                }
+            });
+            return patterns;
+        }
+
+        function addMarkers(patterns) {
+            const markers = [];
+            if (document.getElementById('togglePinBar').classList.contains('active')) {
+                patterns.pinBars.forEach(pb => {
+                    markers.push({ time: pb.candle.time, position: pb.type === 'bullish' ? 'belowBar' : 'aboveBar', color: pb.type === 'bullish' ? '#2962ff' : '#ff9800', shape: pb.type === 'bullish' ? 'arrowUp' : 'arrowDown', text: pb.type === 'bullish' ? 'Pin↑' : 'Pin↓' });
+                });
+            }
+            if (document.getElementById('toggleEngulfing').classList.contains('active')) {
+                patterns.engulfings.forEach(e => {
+                    markers.push({ time: e.current.time, position: e.type === 'bullish' ? 'belowBar' : 'aboveBar', color: '#9C27B0', shape: e.type === 'bullish' ? 'arrowUp' : 'arrowDown', text: e.type === 'bullish' ? '吞↑' : '吞↓' });
+                });
+            }
+            markers.sort((a, b) => a.time - b.time);
+            if (document.getElementById('toggleMarkers').classList.contains('active')) {
+                candlestickSeries.setMarkers(markers);
+            } else {
+                candlestickSeries.setMarkers([]);
+            }
+        }
+
+        // ========== GMMA分析 ==========
+        function analyzeGMMA(data) {
+            if (data.length < 60) return { trend: 'neutral', confidence: 0, details: '数据不足' };
+
+            const shortEmas = GMMA_SHORT.map(p => calcEMA(data, p));
+            const longEmas = GMMA_LONG.map(p => calcEMA(data, p));
+            const last = data.length - 1;
+
+            const shortAvg = shortEmas.reduce((s, e) => s + (e[last] || 0), 0) / GMMA_SHORT.length;
+            const longAvg = longEmas.reduce((s, e) => s + (e[last] || 0), 0) / GMMA_LONG.length;
+
+            const shortVals = shortEmas.map(e => e[last] || 0);
+            const longVals = longEmas.map(e => e[last] || 0);
+            const shortSpread = ((Math.max(...shortVals) - Math.min(...shortVals)) / shortAvg * 100).toFixed(2);
+            const longSpread = ((Math.max(...longVals) - Math.min(...longVals)) / longAvg * 100).toFixed(2);
+
+            let trend = 'neutral', confidence = 0, details = '';
+            if (shortAvg > longAvg * 1.02) {
+                trend = 'bullish';
+                confidence = Math.min(100, 50 + parseFloat(shortSpread) * 5);
+                details = `短期组高于长期组，多头排列`;
+            } else if (shortAvg < longAvg * 0.98) {
+                trend = 'bearish';
+                confidence = Math.min(100, 50 + parseFloat(longSpread) * 5);
+                details = `短期组低于长期组，空头排列`;
+            } else {
+                details = `短期组与长期组接近，震荡`;
+            }
+
+            return { trend, confidence: Math.round(confidence), shortAvg, longAvg, shortSpread, longSpread, details };
+        }
+
+        // ========== 综合信号 ==========
+        function generateSignal(patterns, gmma, data) {
+            let paScore = 0, gmmaScore = 0;
+            const bullish = patterns.pinBars.filter(p => p.type === 'bullish').length + patterns.engulfings.filter(e => e.type === 'bullish').length;
+            const bearish = patterns.pinBars.filter(p => p.type === 'bearish').length + patterns.engulfings.filter(e => e.type === 'bearish').length;
+
+            const reasons = [];
+            if (bullish > bearish) { paScore = Math.min(100, 50 + (bullish - bearish) * 15); reasons.push({ type: 'bullish', text: `价格行为: ${bullish}个多头信号` }); }
+            else if (bearish > bullish) { paScore = Math.max(-100, -50 - (bearish - bullish) * 15); reasons.push({ type: 'bearish', text: `价格行为: ${bearish}个空头信号` }); }
+            else { reasons.push({ type: 'neutral', text: '价格行为: 无明显方向' }); }
+
+            if (gmma.trend === 'bullish') { gmmaScore = gmma.confidence; reasons.push({ type: 'bullish', text: `GMMA: 多头排列 (${gmma.confidence}%)` }); }
+            else if (gmma.trend === 'bearish') { gmmaScore = -gmma.confidence; reasons.push({ type: 'bearish', text: `GMMA: 空头排列 (${gmma.confidence}%)` }); }
+            else { reasons.push({ type: 'neutral', text: 'GMMA: 震荡整理' }); }
+
+            const total = Math.round(paScore * 0.6 + gmmaScore * 0.4);
+            let type = 'hold';
+            if (total > 30) type = 'buy';
+            else if (total < -30) type = 'sell';
+
+            const latest = data[data.length - 1].close;
+            const support = Math.min(...data.slice(-20).map(d => d.low)).toFixed(2);
+            const resistance = Math.max(...data.slice(-20).map(d => d.high)).toFixed(2);
+
+            return { type, total, reasons, support, resistance, current: latest.toFixed(2) };
+        }
+
+        // ========== UI更新 ==========
+        function updateUI(data, patterns, gmma, signal, source) {
+            // 股票信息
+            const latest = data[data.length - 1];
+            const prev = data.length > 1 ? data[data.length - 2] : latest;
+            const change = ((latest.close - prev.close) / prev.close * 100).toFixed(2);
+            const isUp = latest.close >= prev.close;
+
+            document.getElementById('stockPrice').textContent = latest.close.toFixed(2);
+            document.getElementById('stockPrice').className = 'stock-price ' + (isUp ? 'up' : 'down');
+            document.getElementById('stockChange').textContent = (isUp ? '+' : '') + change + '%';
+            document.getElementById('stockChange').className = 'stock-change ' + (isUp ? 'up' : 'down');
+            document.getElementById('stockMeta').textContent = `数据源: ${source} | ${data.length}条`;
+
+            // GMMA趋势
+            const trendBadge = document.getElementById('gmmaTrend');
+            const trendClass = gmma.trend === 'bullish' ? 'bullish' : gmma.trend === 'bearish' ? 'bearish' : 'neutral';
+            const trendText = gmma.trend === 'bullish' ? '多头' : gmma.trend === 'bearish' ? '空头' : '震荡';
+            trendBadge.innerHTML = `<div class="trend-badge ${trendClass}"><span class="trend-icon"></span><span>${trendText}</span></div>`;
+
+            document.getElementById('shortAvg').textContent = gmma.shortAvg?.toFixed(2) || '--';
+            document.getElementById('longAvg').textContent = gmma.longAvg?.toFixed(2) || '--';
+            document.getElementById('trendStrength').textContent = gmma.confidence + '%';
+
+            // 信号
+            const signalTypeEl = document.getElementById('signalType');
+            signalTypeEl.textContent = signal.type === 'buy' ? '做多' : signal.type === 'sell' ? '做空' : '观望';
+            signalTypeEl.className = 'signal-type ' + signal.type;
+
+            const scoreEl = document.getElementById('signalScore');
+            scoreEl.textContent = signal.total;
+            scoreEl.className = 'signal-score ' + (signal.total > 30 ? 'high' : signal.total < -30 ? 'low' : 'medium');
+
+            const fill = document.getElementById('scoreFill');
+            const pct = (signal.total + 100) / 2;
+            fill.style.width = pct + '%';
+            fill.className = 'score-fill ' + (signal.total > 0 ? 'positive' : signal.total < 0 ? 'negative' : 'neutral');
+
+            document.getElementById('supportLevel').textContent = signal.support;
+            document.getElementById('resistanceLevel').textContent = signal.resistance;
+
+            // 分析依据
+            const analysisList = document.getElementById('analysisList');
+            analysisList.innerHTML = signal.reasons.map(r => `
+                <div class="analysis-item">
+                    <span class="analysis-icon ${r.type}">${r.type === 'bullish' ? '↑' : r.type === 'bearish' ? '↓' : '•'}</span>
+                    <span>${r.text}</span>
+                </div>
+            `).join('');
+
+            // 价格行为统计
+            document.getElementById('pinBarCount').textContent = patterns.pinBars.length;
+            document.getElementById('engulfingCount').textContent = patterns.engulfings.length;
+            document.getElementById('dojiCount').textContent = patterns.dojis.length;
+        }
+
+        // ========== 数据获取 ==========
+        async function fetchSina(code) {
+            const prefix = code.startsWith('6') ? 'sh' : 'sz';
+            const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=240&ma=no&datalen=100`;
+            const resp = await fetch(url);
+            const data = JSON.parse(await resp.text());
+            return data.map(k => ({ time: Math.floor(new Date(k.day).getTime() / 1000), open: +k.open, close: +k.close, high: +k.high, low: +k.low, volume: +k.volume || 0 }));
+        }
+
+        async function fetchTencent(code) {
+            const url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=sh${code},day,,,100`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const klines = data.data?.[`sh${code}`]?.day || [];
+            return klines.map(k => ({ time: Math.floor(new Date(k[0]).getTime() / 1000), open: +k[1], close: +k[2], high: +k[3], low: +k[4], volume: +k[5] || 0 }));
+        }
+
+        async function fetchData(code) {
+            const sources = [
+                { name: '新浪', fn: fetchSina },
+                { name: '腾讯', fn: fetchTencent },
+            ];
+            for (const s of sources) {
+                try {
+                    const data = await s.fn(code);
+                    if (data.length > 0) return { data, source: s.name };
+                } catch (e) { console.log(`${s.name} failed:`, e); }
+            }
+            throw new Error('所有数据源失败');
+        }
+
+        // ========== 查询 ==========
+        let period = 'day';
+
+        async function search() {
+            const code = document.getElementById('stockCode').value.trim();
+            if (!code) return alert('请输入股票代码');
+
+            const btn = document.getElementById('searchBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading-spinner"></span>';
+
+            try {
+                const result = await fetchData(code);
+                currentData = result.data;
+
+                document.getElementById('stockName').textContent = `SH.${code}`;
+
+                candlestickSeries.setData(result.data);
+                initGMMA();
+                updateGMMA(result.data);
+
+                const patterns = analyzePatterns(result.data);
+                addMarkers(patterns);
+
+                const gmma = analyzeGMMA(result.data);
+                const signal = generateSignal(patterns, gmma, result.data);
+
+                updateUI(result.data, patterns, gmma, signal, result.source);
+
+            } catch (e) {
+                alert('查询失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '查询';
+            }
+        }
+
+        // ========== 事件绑定 ==========
+        document.getElementById('searchBtn').addEventListener('click', search);
+        document.getElementById('stockCode').addEventListener('keypress', e => { if (e.key === 'Enter') search(); });
+
+        document.querySelectorAll('.timeframe-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.timeframe-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                period = tab.dataset.period;
+            });
+        });
+
+        document.querySelectorAll('.watchlist-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.getElementById('stockCode').value = item.dataset.code;
+                document.querySelectorAll('.watchlist-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                search();
+            });
+        });
+
+        ['toggleGMMA', 'togglePinBar', 'toggleEngulfing', 'toggleMarkers'].forEach(id => {
+            document.getElementById(id).addEventListener('click', function() {
+                this.classList.toggle('active');
+                if (id === 'toggleGMMA') {
+                    gmmaSeries.forEach(({ series }) => series.applyOptions({ visible: this.classList.contains('active') }));
+                } else if (currentData.length > 0) {
+                    addMarkers(analyzePatterns(currentData));
+                }
+            });
+        });
+
+        // ========== 初始化 ==========
+        initChart();
+        window.addEventListener('load', search);
+    </script>
+</body>
+</html>
