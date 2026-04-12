@@ -837,14 +837,28 @@
             });
 
             // 同步两个图表的时间轴
-            chart.timeScale().subscribeVisibleTimeRangeChange(timeRange => {
-                if (timeRange && timeRange.from && timeRange.to) {
-                    try {
-                        indicatorChart.timeScale().setVisibleRange(timeRange);
-                    } catch (e) {
-                        // 忽略同步错误
-                    }
+            let isSyncing = false;
+            
+            chart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+                if (isSyncing || !logicalRange) return;
+                isSyncing = true;
+                try {
+                    indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
+                } catch (e) {
+                    console.log('[同步] 主图->子图失败:', e.message);
                 }
+                setTimeout(() => { isSyncing = false; }, 10);
+            });
+            
+            indicatorChart.timeScale().subscribeVisibleLogicalRangeChange(logicalRange => {
+                if (isSyncing || !logicalRange) return;
+                isSyncing = true;
+                try {
+                    chart.timeScale().setVisibleLogicalRange(logicalRange);
+                } catch (e) {
+                    console.log('[同步] 子图->主图失败:', e.message);
+                }
+                setTimeout(() => { isSyncing = false; }, 10);
             });
 
             // 响应式
