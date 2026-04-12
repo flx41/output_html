@@ -1431,7 +1431,8 @@
             try {
                 const resp = await fetchWithProxy(url);
                 const data = await resp.json();
-                const klines = data.data?.[`${prefix}${code}`]?.day || [];
+                // 按周期取对应字段：day/week/month
+                const klines = data.data?.[`${prefix}${code}`]?.[period] || [];
                 
                 if (klines.length === 0) throw new Error('腾讯API返回空数据');
                 
@@ -1515,7 +1516,8 @@
                 const text = await resp.text();
                 const data = JSON.parse(text);
                 
-                if (data.__ERROR) throw new Error('新浪API错误: ' + data.__ERRORMSG);
+                // 新浪返回数组，如果不是数组则跳过
+                if (!Array.isArray(data)) throw new Error('新浪API返回格式异常');
                 
                 return data.map(k => ({
                     time: dateToTimestamp(k.day),
