@@ -1194,31 +1194,44 @@
             const longEmas = GMMA_LONG.map(p => calcEMA(data, p));
             const last = data.length - 1;
 
-            const shortAvg = shortEmas.reduce((s, e) => s + (e[last] || 0), 0) / GMMA_SHORT.length;
-            const longAvg = longEmas.reduce((s, e) => s + (e[last] || 0), 0) / GMMA_LONG.length;
+            // 计算平均值的辅助函数
+            function getAvg(arr, idx) {
+                const vals = arr.map(e => e[idx]).filter(v => v !== undefined && v !== null);
+                return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+            }
+
+            const shortAvg = getAvg(shortEmas, last);
+            const longAvg = getAvg(longEmas, last);
 
             const shortVals = shortEmas.map(e => e[last] || 0);
             const longVals = longEmas.map(e => e[last] || 0);
-            const shortSpread = ((Math.max(...shortVals) - Math.min(...shortVals)) / shortAvg * 100).toFixed(2);
-            const longSpread = ((Math.max(...longVals) - Math.min(...longVals)) / longAvg * 100).toFixed(2);
+            const shortSpread = shortAvg > 0 ? ((Math.max(...shortVals) - Math.min(...shortVals)) / shortAvg * 100).toFixed(2) : 0;
+            const longSpread = longAvg > 0 ? ((Math.max(...longVals) - Math.min(...longVals)) / longAvg * 100).toFixed(2) : 0;
 
             // 检测金叉死叉（短期组与长期组交叉）
             const crosses = [];
             for (let i = 60; i < data.length; i++) {
-                const prevShortAvg = shortEmas.reduce((s, e) => s + (e[i - 1] || 0), 0) / GMMA_SHORT.length;
-                const prevLongAvg = longEmas.reduce((s, e) => s + (e[i - 1] || 0), 0) / GMMA_LONG.length;
-                const currShortAvg = shortEmas.reduce((s, e) => s + (e[i] || 0), 0) / GMMA_SHORT.length;
-                const currLongAvg = longEmas.reduce((s, e) => s + (e[i] || 0), 0) / GMMA_LONG.length;
+                const prevShortAvg = getAvg(shortEmas, i - 1);
+                const prevLongAvg = getAvg(longEmas, i - 1);
+                const currShortAvg = getAvg(shortEmas, i);
+                const currLongAvg = getAvg(longEmas, i);
+
+                // 跳过无效数据
+                if (prevShortAvg === 0 || prevLongAvg === 0 || currShortAvg === 0 || currLongAvg === 0) continue;
 
                 // 金叉：短期组从下向上穿越长期组
                 if (prevShortAvg <= prevLongAvg && currShortAvg > currLongAvg) {
                     crosses.push({ type: 'golden', time: data[i].time, index: i });
+                    console.log(`[GMMA] 金叉: ${new Date(data[i].time * 1000).toLocaleDateString()}`);
                 }
                 // 死叉：短期组从上向下穿越长期组
                 if (prevShortAvg >= prevLongAvg && currShortAvg < currLongAvg) {
                     crosses.push({ type: 'death', time: data[i].time, index: i });
+                    console.log(`[GMMA] 死叉: ${new Date(data[i].time * 1000).toLocaleDateString()}`);
                 }
             }
+
+            console.log(`[GMMA] 检测到 ${crosses.length} 个交叉点`);
 
             let trend = 'neutral', confidence = 0, details = '';
             if (shortAvg > longAvg * 1.02) {
