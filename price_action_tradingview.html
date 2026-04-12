@@ -203,17 +203,25 @@
 
         /* 图表容器 */
         .chart-container {
-            flex: 1;
+            flex: 3;
             background: var(--bg-secondary);
             border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
             overflow: hidden;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
         #chart {
             width: 100%;
-            height: 100%;
+            flex: 3;
+        }
+
+        #indicatorChart {
+            width: 100%;
+            flex: 1;
+            border-top: 1px solid var(--border-color);
         }
 
         /* 图表控制栏 */
@@ -599,8 +607,15 @@
                     <button class="control-btn active" id="togglePinBar">Pin Bar</button>
                     <button class="control-btn active" id="toggleEngulfing">吞没</button>
                     <button class="control-btn active" id="toggleMarkers">标记</button>
+                    <span style="width:1px;background:var(--border-color);margin:0 4px"></span>
+                    <button class="control-btn active" id="toggleMACD">MACD</button>
+                    <button class="control-btn" id="toggleRSI">RSI</button>
+                    <button class="control-btn" id="toggleKDJ">KDJ</button>
+                    <button class="control-btn" id="toggleBB">布林带</button>
+                    <button class="control-btn" id="toggleVOL">VOL</button>
                 </div>
                 <div id="chart"></div>
+                <div id="indicatorChart"></div>
             </div>
         </div>
 
@@ -711,9 +726,17 @@
     <script>
         // ========== 全局变量 ==========
         let chart = null;
+        let indicatorChart = null;
         let candlestickSeries = null;
         let currentData = [];
         let gmmaSeries = [];
+
+        // 指标系列
+        let macdSeries = { macd: null, signal: null, histogram: null };
+        let rsiSeries = null;
+        let kdjSeries = { k: null, d: null, j: null };
+        let bbSeries = { upper: null, middle: null, lower: null };
+        let volumeSeries = null;
 
         const GMMA_SHORT = [3, 5, 8, 10, 12, 15];
         const GMMA_LONG = [30, 35, 40, 45, 50, 60];
@@ -722,6 +745,7 @@
         function initChart() {
             const container = document.getElementById('chart');
             if (chart) chart.remove();
+            if (indicatorChart) indicatorChart.remove();
 
             chart = LightweightCharts.createChart(container, {
                 layout: {
@@ -743,6 +767,7 @@
                 timeScale: {
                     borderColor: '#363a45',
                     timeVisible: true,
+                    rightOffset: 5,
                 },
             });
 
@@ -755,10 +780,74 @@
                 wickUpColor: '#26a69a',
             });
 
+            // 布林带系列
+            bbSeries.upper = chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, visible: false });
+            bbSeries.middle = chart.addLineSeries({ color: '#FF9800', lineWidth: 1, visible: false });
+            bbSeries.lower = chart.addLineSeries({ color: '#9C27B0', lineWidth: 1, visible: false });
+
+            // 子图（指标）
+            const indicatorContainer = document.getElementById('indicatorChart');
+            indicatorChart = LightweightCharts.createChart(indicatorContainer, {
+                layout: {
+                    background: { type: 'solid', color: '#1e222d' },
+                    textColor: '#787b86',
+                },
+                grid: {
+                    vertLines: { color: '#2a2e39' },
+                    horzLines: { color: '#2a2e39' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: { color: '#5d606a' },
+                    horzLine: { color: '#5d606a' },
+                },
+                rightPriceScale: {
+                    borderColor: '#363a45',
+                },
+                timeScale: {
+                    borderColor: '#363a45',
+                    timeVisible: true,
+                    rightOffset: 5,
+                },
+            });
+
+            // MACD系列
+            macdSeries.macd = indicatorChart.addLineSeries({ color: '#2196F3', lineWidth: 1, visible: true });
+            macdSeries.signal = indicatorChart.addLineSeries({ color: '#FF9800', lineWidth: 1, visible: true });
+            macdSeries.histogram = indicatorChart.addHistogramSeries({
+                color: '#26a69a',
+                base: 0,
+                visible: true,
+            });
+
+            // RSI系列
+            rsiSeries = indicatorChart.addLineSeries({ color: '#E040FB', lineWidth: 1, visible: false });
+
+            // KDJ系列
+            kdjSeries.k = indicatorChart.addLineSeries({ color: '#2196F3', lineWidth: 1, visible: false });
+            kdjSeries.d = indicatorChart.addLineSeries({ color: '#FF9800', lineWidth: 1, visible: false });
+            kdjSeries.j = indicatorChart.addLineSeries({ color: '#E040FB', lineWidth: 1, visible: false });
+
+            // 成交量系列
+            volumeSeries = indicatorChart.addHistogramSeries({
+                color: '#26a69a',
+                base: 0,
+                visible: false,
+            });
+
+            // 同步两个图表的时间轴
+            chart.timeScale().subscribeVisibleTimeRangeChange(timeRange => {
+                if (timeRange) indicatorChart.timeScale().setVisibleRange(timeRange);
+            });
+
             // 响应式
             new ResizeObserver(() => {
                 chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
             }).observe(container);
+
+            new ResizeObserver(() => {
+                indicatorChart.applyOptions({ width: indicatorContainer.clientWidth, height: indicatorContainer.clientHeight });
+            }).observe(indicatorContainer);
         }
 
         // ========== EMA计算 ==========
@@ -772,6 +861,209 @@
                 ema[i] = (data[i].close - ema[i - 1]) * k + ema[i - 1];
             }
             return ema;
+        }
+
+        // ========== SMA计算 ==========
+        function calcSMA(data, period) {
+            const sma = [];
+            for (let i = period - 1; i < data.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < period; j++) sum += data[i - j].close;
+                sma[i] = sum / period;
+            }
+            return sma;
+        }
+
+        // ========== MACD计算 (12, 26, 9) ==========
+        function calcMACD(data, fast = 12, slow = 26, signal = 9) {
+            const emaFast = calcEMA(data, fast);
+            const emaSlow = calcEMA(data, slow);
+            
+            const macdLine = [];
+            const signalLine = [];
+            const histogram = [];
+            
+            // MACD线 = 快线EMA - 慢线EMA
+            for (let i = slow - 1; i < data.length; i++) {
+                macdLine[i] = (emaFast[i] || 0) - (emaSlow[i] || 0);
+            }
+            
+            // 信号线 = MACD的EMA
+            const k = 2 / (signal + 1);
+            let sum = 0;
+            for (let i = slow - 1; i < slow - 1 + signal && i < data.length; i++) {
+                sum += macdLine[i] || 0;
+            }
+            signalLine[slow - 1 + signal - 1] = sum / signal;
+            
+            for (let i = slow - 1 + signal; i < data.length; i++) {
+                signalLine[i] = (macdLine[i] - (signalLine[i - 1] || 0)) * k + (signalLine[i - 1] || 0);
+            }
+            
+            // 柱状图 = MACD - 信号线
+            for (let i = slow - 1 + signal - 1; i < data.length; i++) {
+                histogram[i] = (macdLine[i] || 0) - (signalLine[i] || 0);
+            }
+            
+            return { macdLine, signalLine, histogram };
+        }
+
+        // ========== RSI计算 (14) ==========
+        function calcRSI(data, period = 14) {
+            const rsi = [];
+            let avgGain = 0, avgLoss = 0;
+            
+            // 初始平均涨跌
+            for (let i = 1; i <= period && i < data.length; i++) {
+                const change = data[i].close - data[i - 1].close;
+                if (change > 0) avgGain += change;
+                else avgLoss += Math.abs(change);
+            }
+            avgGain /= period;
+            avgLoss /= period;
+            
+            if (avgLoss === 0) {
+                rsi[period] = 100;
+            } else {
+                rsi[period] = 100 - (100 / (1 + avgGain / avgLoss));
+            }
+            
+            // 后续RSI
+            for (let i = period + 1; i < data.length; i++) {
+                const change = data[i].close - data[i - 1].close;
+                let gain = 0, loss = 0;
+                if (change > 0) gain = change;
+                else loss = Math.abs(change);
+                
+                avgGain = (avgGain * (period - 1) + gain) / period;
+                avgLoss = (avgLoss * (period - 1) + loss) / period;
+                
+                if (avgLoss === 0) {
+                    rsi[i] = 100;
+                } else {
+                    rsi[i] = 100 - (100 / (1 + avgGain / avgLoss));
+                }
+            }
+            
+            return rsi;
+        }
+
+        // ========== KDJ计算 (9, 3, 3) ==========
+        function calcKDJ(data, n = 9, m1 = 3, m2 = 3) {
+            const kArr = [], dArr = [], jArr = [];
+            let prevK = 50, prevD = 50;
+            
+            for (let i = n - 1; i < data.length; i++) {
+                let highest = -Infinity, lowest = Infinity;
+                for (let j = 0; j < n; j++) {
+                    highest = Math.max(highest, data[i - j].high);
+                    lowest = Math.min(lowest, data[i - j].low);
+                }
+                
+                const rsv = highest === lowest ? 50 : ((data[i].close - lowest) / (highest - lowest)) * 100;
+                const k = (2 * prevK + rsv) / m1;
+                const d = (2 * prevD + k) / m2;
+                const j = 3 * k - 2 * d;
+                
+                kArr[i] = k;
+                dArr[i] = d;
+                jArr[i] = j;
+                
+                prevK = k;
+                prevD = d;
+            }
+            
+            return { k: kArr, d: dArr, j: jArr };
+        }
+
+        // ========== 布林带计算 (20, 2) ==========
+        function calcBollingerBands(data, period = 20, multiplier = 2) {
+            const upper = [], middle = [], lower = [];
+            
+            for (let i = period - 1; i < data.length; i++) {
+                let sum = 0;
+                for (let j = 0; j < period; j++) sum += data[i - j].close;
+                const avg = sum / period;
+                
+                let variance = 0;
+                for (let j = 0; j < period; j++) variance += Math.pow(data[i - j].close - avg, 2);
+                const std = Math.sqrt(variance / period);
+                
+                middle[i] = avg;
+                upper[i] = avg + multiplier * std;
+                lower[i] = avg - multiplier * std;
+            }
+            
+            return { upper, middle, lower };
+        }
+
+        // ========== 成交量处理 ==========
+        function getVolumeData(data) {
+            return data.map(d => ({
+                time: d.time,
+                value: d.volume,
+                color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+            }));
+        }
+
+        // ========== 更新所有指标 ==========
+        function updateIndicators(data) {
+            // MACD
+            const macd = calcMACD(data);
+            const macdData = [], signalData = [], histData = [];
+            for (let i = 25; i < data.length; i++) {
+                if (macd.macdLine[i] !== undefined) {
+                    macdData.push({ time: data[i].time, value: macd.macdLine[i] });
+                    signalData.push({ time: data[i].time, value: macd.signalLine[i] || 0 });
+                    histData.push({
+                        time: data[i].time,
+                        value: macd.histogram[i] || 0,
+                        color: (macd.histogram[i] || 0) >= 0 ? 'rgba(38, 166, 154, 0.6)' : 'rgba(239, 83, 80, 0.6)'
+                    });
+                }
+            }
+            macdSeries.macd.setData(macdData);
+            macdSeries.signal.setData(signalData);
+            macdSeries.histogram.setData(histData);
+
+            // RSI
+            const rsi = calcRSI(data);
+            const rsiData = [];
+            for (let i = 14; i < data.length; i++) {
+                if (rsi[i] !== undefined) rsiData.push({ time: data[i].time, value: rsi[i] });
+            }
+            rsiSeries.setData(rsiData);
+
+            // KDJ
+            const kdj = calcKDJ(data);
+            const kData = [], dData = [], jData = [];
+            for (let i = 8; i < data.length; i++) {
+                if (kdj.k[i] !== undefined) {
+                    kData.push({ time: data[i].time, value: kdj.k[i] });
+                    dData.push({ time: data[i].time, value: kdj.d[i] });
+                    jData.push({ time: data[i].time, value: kdj.j[i] });
+                }
+            }
+            kdjSeries.k.setData(kData);
+            kdjSeries.d.setData(dData);
+            kdjSeries.j.setData(jData);
+
+            // 布林带
+            const bb = calcBollingerBands(data);
+            const upperData = [], middleData = [], lowerData = [];
+            for (let i = 19; i < data.length; i++) {
+                if (bb.upper[i] !== undefined) {
+                    upperData.push({ time: data[i].time, value: bb.upper[i] });
+                    middleData.push({ time: data[i].time, value: bb.middle[i] });
+                    lowerData.push({ time: data[i].time, value: bb.lower[i] });
+                }
+            }
+            bbSeries.upper.setData(upperData);
+            bbSeries.middle.setData(middleData);
+            bbSeries.lower.setData(lowerData);
+
+            // 成交量
+            volumeSeries.setData(getVolumeData(data));
         }
 
         // ========== GMMA ==========
@@ -1133,6 +1425,7 @@
                 candlestickSeries.setData(result.data);
                 initGMMA();
                 updateGMMA(result.data);
+                updateIndicators(result.data);
 
                 const patterns = analyzePatterns(result.data);
                 addMarkers(patterns);
@@ -1179,6 +1472,43 @@
                 } else if (currentData.length > 0) {
                     addMarkers(analyzePatterns(currentData));
                 }
+            });
+        });
+
+        // 指标切换
+        const indicatorToggles = {
+            toggleMACD: () => {
+                const visible = document.getElementById('toggleMACD').classList.contains('active');
+                macdSeries.macd.applyOptions({ visible });
+                macdSeries.signal.applyOptions({ visible });
+                macdSeries.histogram.applyOptions({ visible });
+            },
+            toggleRSI: () => {
+                const visible = document.getElementById('toggleRSI').classList.contains('active');
+                rsiSeries.applyOptions({ visible });
+            },
+            toggleKDJ: () => {
+                const visible = document.getElementById('toggleKDJ').classList.contains('active');
+                kdjSeries.k.applyOptions({ visible });
+                kdjSeries.d.applyOptions({ visible });
+                kdjSeries.j.applyOptions({ visible });
+            },
+            toggleBB: () => {
+                const visible = document.getElementById('toggleBB').classList.contains('active');
+                bbSeries.upper.applyOptions({ visible });
+                bbSeries.middle.applyOptions({ visible });
+                bbSeries.lower.applyOptions({ visible });
+            },
+            toggleVOL: () => {
+                const visible = document.getElementById('toggleVOL').classList.contains('active');
+                volumeSeries.applyOptions({ visible });
+            },
+        };
+
+        Object.keys(indicatorToggles).forEach(id => {
+            document.getElementById(id).addEventListener('click', function() {
+                this.classList.toggle('active');
+                indicatorToggles[id]();
             });
         });
 
