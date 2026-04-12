@@ -1342,6 +1342,27 @@
 
         // ========== 数据获取 ==========
         
+        // CORS代理列表（免费公共代理）
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/',
+        ];
+        
+        // 当前使用的代理索引
+        let currentProxyIndex = 0;
+        
+        // 获取带代理的URL
+        function getProxiedUrl(url) {
+            return CORS_PROXIES[currentProxyIndex] + encodeURIComponent(url);
+        }
+        
+        // 切换到下一个代理
+        function switchProxy() {
+            currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+            console.log(`[代理] 切换到: ${CORS_PROXIES[currentProxyIndex]}`);
+        }
+        
         // 日期转时间戳（处理时区问题）
         function dateToTimestamp(dateStr) {
             // 格式: "2025-11-11" 或 "20251111"
@@ -1352,6 +1373,35 @@
             return Math.floor(date.getTime() / 1000);
         }
 
+        // 带代理的fetch
+        async function fetchWithProxy(url, options = {}) {
+            // 先尝试直接请求
+            try {
+                const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
+                if (resp.ok) return resp;
+            } catch (e) {
+                console.log('[代理] 直接请求失败，尝试代理...');
+            }
+            
+            // 尝试每个代理
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxyUrl = getProxiedUrl(url);
+                    console.log(`[代理] 尝试: ${proxyUrl.substring(0, 50)}...`);
+                    const resp = await fetch(proxyUrl, { ...options, signal: AbortSignal.timeout(8000) });
+                    if (resp.ok) {
+                        console.log('[代理] 成功');
+                        return resp;
+                    }
+                } catch (e) {
+                    console.log(`[代理] 失败: ${e.message}`);
+                    switchProxy();
+                }
+            }
+            
+            throw new Error('所有代理都失败');
+        }
+
         // 腾讯API（主要）
         async function fetchTencent(code) {
             const prefix = code.startsWith('6') ? 'sh' : 'sz';
@@ -1359,8 +1409,7 @@
             console.log('[腾讯] 请求:', url);
             
             try {
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const resp = await fetchWithProxy(url);
                 const data = await resp.json();
                 const klines = data.data?.[`${prefix}${code}`]?.day || [];
                 
@@ -1381,7 +1430,7 @@
             }
         }
 
-        // 东方财富API（备用）
+        // 东方财富API（JSONP方式，不受CORS限制）
         function fetchEastMoney(code) {
             return new Promise((resolve, reject) => {
                 const callbackName = 'emCallback_' + Date.now();
@@ -1432,30 +1481,35 @@
             });
         }
 
-        // 新浪API（暂时不可用）
+        // 新浪API（备用）
         async function fetchSina(code) {
             const prefix = code.startsWith('6') ? 'sh' : 'sz';
             const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=240&ma=no&datalen=100`;
-            const resp = await fetch(url);
-            const text = await resp.text();
-            const data = JSON.parse(text);
             
-            if (data.__ERROR) throw new Error('新浪API错误: ' + data.__ERRORMSG);
-            
-            return data.map(k => ({
-                time: dateToTimestamp(k.day),
-                open: parseFloat(k.open),
-                close: parseFloat(k.close),
-                high: parseFloat(k.high),
-                low: parseFloat(k.low),
-                volume: parseFloat(k.volume) || 0
-            }));
+            try {
+                const resp = await fetchWithProxy(url);
+                const text = await resp.text();
+                const data = JSON.parse(text);
+                
+                if (data.__ERROR) throw new Error('新浪API错误: ' + data.__ERRORMSG);
+                
+                return data.map(k => ({
+                    time: dateToTimestamp(k.day),
+                    open: parseFloat(k.open),
+                    close: parseFloat(k.close),
+                    high: parseFloat(k.high),
+                    low: parseFloat(k.low),
+                    volume: parseFloat(k.volume) || 0
+                }));
+            } catch (e) {
+                throw e;
+            }
         }
 
         async function fetchData(code) {
             const sources = [
+                { name: '东方财富', fn: fetchEastMoney },  // JSONP，最可靠
                 { name: '腾讯', fn: fetchTencent },
-                { name: '东方财富', fn: fetchEastMoney },
                 { name: '新浪', fn: fetchSina },
             ];
             
