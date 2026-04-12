@@ -22,8 +22,8 @@
             --text-muted: #5d606a;
             --accent-blue: #2962ff;
             --accent-blue-light: #4a8aff;
-            --up-color: #26a69a;
-            --down-color: #ef5350;
+            --up-color: #ef5350;
+            --down-color: #26a69a;
             --warning-color: #ff9800;
             --card-radius: 8px;
         }
@@ -703,12 +703,12 @@
                 <div class="panel-title">图例</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                     <div class="legend-item">
-                        <div class="legend-dot" style="background: #26a69a"></div>
-                        <span>阳线</span>
+                        <div class="legend-dot" style="background: #ef5350"></div>
+                        <span>阳线（涨）</span>
                     </div>
                     <div class="legend-item">
-                        <div class="legend-dot" style="background: #ef5350"></div>
-                        <span>阴线</span>
+                        <div class="legend-dot" style="background: #26a69a"></div>
+                        <span>阴线（跌）</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-dot" style="background: #2196F3"></div>
@@ -772,12 +772,12 @@
             });
 
             candlestickSeries = chart.addCandlestickSeries({
-                upColor: '#26a69a',
-                downColor: '#ef5350',
-                borderDownColor: '#ef5350',
-                borderUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
-                wickUpColor: '#26a69a',
+                upColor: '#ef5350',
+                downColor: '#26a69a',
+                borderDownColor: '#26a69a',
+                borderUpColor: '#ef5350',
+                wickDownColor: '#26a69a',
+                wickUpColor: '#ef5350',
             });
 
             // 布林带系列
@@ -815,7 +815,7 @@
             macdSeries.macd = indicatorChart.addLineSeries({ color: '#2196F3', lineWidth: 1, visible: true });
             macdSeries.signal = indicatorChart.addLineSeries({ color: '#FF9800', lineWidth: 1, visible: true });
             macdSeries.histogram = indicatorChart.addHistogramSeries({
-                color: '#26a69a',
+                color: '#ef5350',
                 base: 0,
                 visible: true,
             });
@@ -830,7 +830,7 @@
 
             // 成交量系列
             volumeSeries = indicatorChart.addHistogramSeries({
-                color: '#26a69a',
+                color: '#ef5350',
                 base: 0,
                 visible: false,
             });
@@ -1002,7 +1002,7 @@
             return data.map(d => ({
                 time: d.time,
                 value: d.volume,
-                color: d.close >= d.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                color: d.close >= d.open ? 'rgba(239, 83, 80, 0.5)' : 'rgba(38, 166, 154, 0.5)'
             }));
         }
 
@@ -1018,7 +1018,7 @@
                     histData.push({
                         time: data[i].time,
                         value: macd.histogram[i] || 0,
-                        color: (macd.histogram[i] || 0) >= 0 ? 'rgba(38, 166, 154, 0.6)' : 'rgba(239, 83, 80, 0.6)'
+                        color: (macd.histogram[i] || 0) >= 0 ? 'rgba(239, 83, 80, 0.6)' : 'rgba(38, 166, 154, 0.6)'
                     });
                 }
             }
