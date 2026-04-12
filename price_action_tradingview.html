@@ -1564,13 +1564,21 @@
         // 东方财富API（JSONP方式，不受CORS限制）
         function fetchEastMoney(code, period = 'day') {
             return new Promise((resolve, reject) => {
-                const callbackName = 'emCallback_' + Date.now();
+                const callbackName = 'emCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                let script = null;
+                let timeoutId = null;
+                
+                // 清理函数
+                const cleanup = () => {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    delete window[callbackName];
+                    if (script && script.parentNode) script.parentNode.removeChild(script);
+                };
                 
                 window[callbackName] = function(data) {
-                    delete window[callbackName];
-                    if (script.parentNode) script.parentNode.removeChild(script);
+                    cleanup();
                     
-                    if (data?.data?.klines) {
+                    if (data?.data?.klines && data.data.klines.length > 0) {
                         const klines = data.data.klines.map(kline => {
                             const [date, open, close, high, low, volume] = kline.split(',');
                             return {
@@ -1585,7 +1593,7 @@
                         console.log('[东方财富] 数据条数:', klines.length);
                         resolve(klines);
                     } else {
-                        reject(new Error('东方财富API数据格式异常'));
+                        reject(new Error('东方财富API返回空数据'));
                     }
                 };
                 
@@ -1596,26 +1604,26 @@
                 else if (period === '30') klt = 30;
                 else if (period === '60') klt = 60;
                 else klt = 101;
+                
                 const secid = code.startsWith('6') ? `1.${code}` : `0.${code}`;
                 const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=100&cb=${callbackName}`;
                 
                 console.log('[东方财富] 请求:', url);
                 
-                const script = document.createElement('script');
+                script = document.createElement('script');
                 script.src = url;
                 script.onerror = () => {
-                    delete window[callbackName];
-                    reject(new Error('东方财富API加载失败'));
+                    cleanup();
+                    reject(new Error('东方财富API脚本加载失败'));
                 };
                 document.head.appendChild(script);
                 
-                setTimeout(() => {
+                timeoutId = setTimeout(() => {
                     if (window[callbackName]) {
-                        delete window[callbackName];
-                        if (script.parentNode) script.parentNode.removeChild(script);
-                        reject(new Error('东方财富API请求超时'));
+                        cleanup();
+                        reject(new Error('东方财富API请求超时（15秒）'));
                     }
-                }, 10000);
+                }, 15000);
             });
         }
 
@@ -1654,9 +1662,8 @@
 
         async function fetchData(code, period = 'day') {
             const sources = [
-                { name: '东方财富', fn: fetchEastMoney },  // JSONP，最可靠
-                { name: '腾讯', fn: fetchTencent },
-                { name: '新浪', fn: fetchSina },
+                { name: '东方财富', fn: fetchEastMoney },  // JSONP，不受CORS限制
+                { name: '腾讯', fn: fetchTencent },        // 通过代理请求
             ];
             
             let lastError = null;
