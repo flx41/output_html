@@ -639,12 +639,7 @@
             <button class="btn" id="searchBtn">查询</button>
         </div>
 
-        <div class="watchlist">
-            <span class="watchlist-item" data-code="600519">茅台</span>
-            <span class="watchlist-item" data-code="000858">五粮液</span>
-            <span class="watchlist-item" data-code="300750">宁德</span>
-            <span class="watchlist-item" data-code="000001">平安</span>
-        </div>
+
     </nav>
 
     <!-- 主内容 -->
@@ -1816,14 +1811,7 @@
             });
         });
 
-        document.querySelectorAll('.watchlist-item').forEach(item => {
-            item.addEventListener('click', () => {
-                document.getElementById('stockCode').value = item.dataset.code;
-                document.querySelectorAll('.watchlist-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-                search();
-            });
-        });
+
 
         ['toggleGMMA', 'togglePinBar', 'toggleEngulfing', 'toggleMarkers', 'toggleCross'].forEach(id => {
             document.getElementById(id).addEventListener('click', function() {
