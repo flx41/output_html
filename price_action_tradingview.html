@@ -77,6 +77,7 @@
             font-size: 13px;
             outline: none;
             transition: border-color 0.2s;
+            position: relative;
         }
 
         .search-input:focus {
@@ -85,6 +86,59 @@
 
         .search-input::placeholder {
             color: var(--text-muted);
+        }
+
+        /* 搜索建议下拉框 */
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-top: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+
+        .suggestions.show {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .suggestion-name {
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .suggestion-code {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'Roboto Mono', monospace;
         }
 
         .btn {
@@ -571,7 +625,10 @@
         </div>
         
         <div class="search-bar">
-            <input type="text" class="search-input" id="stockCode" placeholder="输入股票代码 (如: 600519)" value="600519">
+            <div class="search-wrapper">
+                <input type="text" class="search-input" id="stockCode" placeholder="输入股票代码或名称 (如: 600519 或 茅台)" value="600519">
+                <div class="suggestions" id="suggestions"></div>
+            </div>
             <div class="timeframe-tabs">
                 <button class="timeframe-tab active" data-period="day">日K</button>
                 <button class="timeframe-tab" data-period="week">周K</button>
@@ -725,6 +782,53 @@
     </div>
 
     <script>
+        // ========== 股票名称数据库 ==========
+        const STOCK_DATABASE = [
+            { code: '600519', name: '贵州茅台', market: 'sh' },
+            { code: '000858', name: '五粮液', market: 'sz' },
+            { code: '300750', name: '宁德时代', market: 'sz' },
+            { code: '000001', name: '平安银行', market: 'sz' },
+            { code: '601318', name: '中国平安', market: 'sh' },
+            { code: '601138', name: '工业富联', market: 'sh' },
+            { code: '000333', name: '美的集团', market: 'sz' },
+            { code: '600036', name: '招商银行', market: 'sh' },
+            { code: '601012', name: '隆基绿能', market: 'sh' },
+            { code: '300059', name: '东方财富', market: 'sz' },
+            { code: '002594', name: '比亚迪', market: 'sz' },
+            { code: '000002', name: '万科A', market: 'sz' },
+            { code: '600900', name: '长江电力', market: 'sh' },
+            { code: '601888', name: '中国中免', market: 'sh' },
+            { code: '300015', name: '爱尔眼科', market: 'sz' },
+            { code: '002714', name: '牧原股份', market: 'sz' },
+            { code: '300502', name: '新易盛', market: 'sz' },
+            { code: '300308', name: '中际旭创', market: 'sz' },
+            { code: '688981', name: '中芯国际', market: 'sh' },
+            { code: '688111', name: '金山办公', market: 'sh' },
+            { code: '002475', name: '立讯精密', market: 'sz' },
+            { code: '300274', name: '阳光电源', market: 'sz' },
+            { code: '600031', name: '三一重工', market: 'sh' },
+            { code: '000725', name: '京东方A', market: 'sz' },
+            { code: '601166', name: '兴业银行', market: 'sh' },
+            { code: '600276', name: '恒瑞医药', market: 'sh' },
+            { code: '300760', name: '迈瑞医疗', market: 'sz' },
+            { code: '000568', name: '泸州老窖', market: 'sz' },
+            { code: '600809', name: '山西汾酒', market: 'sh' },
+            { code: '002352', name: '顺丰控股', market: 'sz' },
+        ];
+
+        // 搜索股票
+        function searchStocks(keyword) {
+            if (!keyword || keyword.length < 1) return [];
+            
+            keyword = keyword.toUpperCase();
+            
+            return STOCK_DATABASE.filter(stock => {
+                return stock.code.includes(keyword) || 
+                       stock.name.includes(keyword) ||
+                       stock.name.toUpperCase().includes(keyword);
+            }).slice(0, 10);
+        }
+
         // ========== 全局变量 ==========
         let chart = null;
         let indicatorChart = null;
@@ -1612,7 +1716,70 @@
 
         // ========== 事件绑定 ==========
         document.getElementById('searchBtn').addEventListener('click', search);
-        document.getElementById('stockCode').addEventListener('keypress', e => { if (e.key === 'Enter') search(); });
+        document.getElementById('stockCode').addEventListener('keypress', e => { 
+            if (e.key === 'Enter') {
+                hideSuggestions();
+                search(); 
+            }
+        });
+
+        // 搜索建议功能
+        const stockCodeInput = document.getElementById('stockCode');
+        const suggestionsEl = document.getElementById('suggestions');
+
+        function showSuggestions(results) {
+            if (results.length === 0) {
+                hideSuggestions();
+                return;
+            }
+
+            suggestionsEl.innerHTML = results.map(stock => `
+                <div class="suggestion-item" data-code="${stock.code}">
+                    <span class="suggestion-name">${stock.name}</span>
+                    <span class="suggestion-code">${stock.code}</span>
+                </div>
+            `).join('');
+
+            suggestionsEl.classList.add('show');
+
+            // 绑定点击事件
+            suggestionsEl.querySelectorAll('.suggestion-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    stockCodeInput.value = item.dataset.code;
+                    hideSuggestions();
+                    search();
+                });
+            });
+        }
+
+        function hideSuggestions() {
+            suggestionsEl.classList.remove('show');
+        }
+
+        stockCodeInput.addEventListener('input', () => {
+            const keyword = stockCodeInput.value.trim();
+            if (keyword.length >= 1) {
+                const results = searchStocks(keyword);
+                showSuggestions(results);
+            } else {
+                hideSuggestions();
+            }
+        });
+
+        stockCodeInput.addEventListener('focus', () => {
+            const keyword = stockCodeInput.value.trim();
+            if (keyword.length >= 1) {
+                const results = searchStocks(keyword);
+                showSuggestions(results);
+            }
+        });
+
+        // 点击外部关闭建议
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-wrapper')) {
+                hideSuggestions();
+            }
+        });
 
         document.querySelectorAll('.timeframe-tab').forEach(tab => {
             tab.addEventListener('click', () => {
