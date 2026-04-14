@@ -2336,6 +2336,7 @@
                 const callbackName = 'emCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 let script = null;
                 let timeoutId = null;
+                let resolved = false;
                 
                 // 清理函数
                 const cleanup = () => {
@@ -2345,23 +2346,30 @@
                 };
                 
                 window[callbackName] = function(data) {
+                    if (resolved) return;
+                    resolved = true;
                     cleanup();
+                    
+                    console.log('[东方财富] 收到数据:', data?.data?.klines?.length || 0, '条');
                     
                     if (data?.data?.klines && data.data.klines.length > 0) {
                         const klines = data.data.klines.map(kline => {
-                            const [date, open, close, high, low, volume] = kline.split(',');
+                            const parts = kline.split(',');
+                            const date = parts[0];
+                            const open = parseFloat(parts[1]);
+                            const close = parseFloat(parts[2]);
+                            const high = parseFloat(parts[3]);
+                            const low = parseFloat(parts[4]);
+                            const volume = parseFloat(parts[5]) || 0;
                             return {
                                 time: dateToTimestamp(date),
-                                open: parseFloat(open),
-                                close: parseFloat(close),
-                                high: parseFloat(high),
-                                low: parseFloat(low),
-                                volume: parseFloat(volume) || 0
+                                open, close, high, low, volume
                             };
                         });
-                        console.log('[东方财富] 数据条数:', klines.length);
+                        console.log('[东方财富] 解析完成:', klines.length, '条');
                         resolve(klines);
                     } else {
+                        console.error('[东方财富] 数据格式异常:', data);
                         reject(new Error('东方财富API返回空数据'));
                     }
                 };
@@ -2377,24 +2385,29 @@
                 
                 const prefix = getMarketPrefix(code);
                 const secid = prefix === 'sh' ? `1.${code}` : `0.${code}`;
-                const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=200&cb=${callbackName}`;
+                const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=${klt}&fqt=1&end=20500101&lmt=200&cb=${callbackName}`;
                 
                 console.log('[东方财富] 请求:', url);
                 
                 script = document.createElement('script');
                 script.src = url;
-                script.onerror = () => {
+                script.onerror = (e) => {
+                    if (resolved) return;
+                    resolved = true;
                     cleanup();
+                    console.error('[东方财富] 脚本加载失败:', e);
                     reject(new Error('东方财富API脚本加载失败'));
                 };
                 document.head.appendChild(script);
                 
                 timeoutId = setTimeout(() => {
-                    if (window[callbackName]) {
+                    if (!resolved && window[callbackName]) {
+                        resolved = true;
                         cleanup();
-                        reject(new Error('东方财富API请求超时（15秒）'));
+                        console.error('[东方财富] 请求超时');
+                        reject(new Error('东方财富API请求超时'));
                     }
-                }, 15000);
+                }, 10000);
             });
         }
 
