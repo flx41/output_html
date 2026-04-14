@@ -2242,11 +2242,23 @@
         }
 
         async function fetchData(code, period = 'day') {
-            const sources = [
-                { name: 'Tushare', fn: fetchTushareDaily },  // Tushare数据源（推荐）
-                { name: '东方财富', fn: fetchEastMoney },     // JSONP，不受CORS限制
-                { name: '腾讯', fn: fetchTencent },           // 通过代理请求
-            ];
+            // 根据周期选择数据源
+            // 分钟线：只用东方财富（JSONP）
+            // 日/周/月：优先Tushare，其次东方财富，最后腾讯
+            const isMinutePeriod = ['5', '30', '60'].includes(period);
+            
+            let sources;
+            if (isMinutePeriod) {
+                sources = [
+                    { name: '东方财富', fn: fetchEastMoney },  // JSONP，不受CORS限制
+                ];
+            } else {
+                sources = [
+                    { name: 'Tushare', fn: fetchTushareDaily },  // Tushare数据源（推荐）
+                    { name: '东方财富', fn: fetchEastMoney },     // JSONP，不受CORS限制
+                    { name: '腾讯', fn: fetchTencent },           // 通过代理请求
+                ];
+            }
             
             let lastError = null;
             
