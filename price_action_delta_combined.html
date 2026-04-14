@@ -895,6 +895,14 @@
     <script>
         // ========== 股票名称数据库 ==========
         const STOCK_DATABASE = [
+            // 指数
+            { code: '000001', name: '上证指数', market: 'sh' },
+            { code: '399001', name: '深证成指', market: 'sz' },
+            { code: '399006', name: '创业板指', market: 'sz' },
+            { code: '000300', name: '沪深300', market: 'sh' },
+            { code: '000905', name: '中证500', market: 'sh' },
+            { code: '399005', name: '中小板指', market: 'sz' },
+            // 热门股票
             { code: '600519', name: '贵州茅台', market: 'sh' },
             { code: '000858', name: '五粮液', market: 'sz' },
             { code: '300750', name: '宁德时代', market: 'sz' },
@@ -938,7 +946,7 @@
                     return tushareResults.map(stock => ({
                         code: stock.code,
                         name: stock.name,
-                        market: stock.code.startsWith('6') ? 'sh' : 'sz'
+                        market: getMarketPrefix(stock.code)
                     }));
                 }
             } catch (e) {
@@ -2100,9 +2108,22 @@
             return [];
         }
         
+        // 获取市场前缀
+        function getMarketPrefix(code) {
+            // 指数代码判断
+            if (code === '000001' || code === '000300') return 'sh';  // 上证指数、沪深300
+            if (code === '399001' || code === '399006' || code === '399005') return 'sz';  // 深证成指、创业板指、中小板指
+            
+            // 股票代码判断
+            if (code.startsWith('6')) return 'sh';  // 上海主板
+            if (code.startsWith('0') || code.startsWith('3')) return 'sz';  // 深圳主板/创业板
+            
+            return 'sz';  // 默认深圳
+        }
+
         // 腾讯API（主要）
         async function fetchTencent(code, period = 'day') {
-            const prefix = code.startsWith('6') ? 'sh' : 'sz';
+            const prefix = getMarketPrefix(code);
             // 分钟K线使用不同的参数格式
             let url;
             if (period === '5' || period === '30' || period === '60') {
@@ -2185,7 +2206,8 @@
                 else if (period === '60') klt = 60;
                 else klt = 101;
                 
-                const secid = code.startsWith('6') ? `1.${code}` : `0.${code}`;
+                const prefix = getMarketPrefix(code);
+                const secid = prefix === 'sh' ? `1.${code}` : `0.${code}`;
                 const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=100&cb=${callbackName}`;
                 
                 console.log('[东方财富] 请求:', url);
@@ -2209,7 +2231,7 @@
 
         // 新浪API（备用）
         async function fetchSina(code, period = 'day') {
-            const prefix = code.startsWith('6') ? 'sh' : 'sz';
+            const prefix = getMarketPrefix(code);
             // scale参数: 240=日K, 1680=周K, 7200=月K, 5=5分钟, 30=30分钟, 60=60分钟
             let scale;
             if (period === 'week') scale = 1680;
