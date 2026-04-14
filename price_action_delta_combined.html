@@ -2447,7 +2447,7 @@
 
         async function fetchData(code, period = 'day') {
             // 根据周期选择数据源
-            // 分钟线：只用东方财富（JSONP）
+            // 分钟线：优先东方财富，失败降级到腾讯（但腾讯分钟线可能无数据）
             // 日/周/月：优先Tushare，其次东方财富，最后腾讯
             const isMinutePeriod = ['5', '30', '60'].includes(period);
             
@@ -2455,6 +2455,7 @@
             if (isMinutePeriod) {
                 sources = [
                     { name: '东方财富', fn: fetchEastMoney },  // JSONP，不受CORS限制
+                    { name: '腾讯', fn: fetchTencent },        // 备用（可能返回bad params）
                 ];
             } else {
                 sources = [
@@ -2508,7 +2509,11 @@
                 }
             }
             
-            throw new Error(`所有数据源失败: ${lastError?.message || '未知错误'}`);
+            // 所有数据源失败，给出友好提示
+            const errorMsg = isMinutePeriod 
+                ? `分钟线数据获取失败（${lastError?.message}）。\n\n可能原因：\n1. 东方财富API被网络阻止\n2. 非交易时间无分钟数据\n\n建议：切换到日K/周K/月K查看`
+                : `所有数据源失败: ${lastError?.message || '未知错误'}`;
+            throw new Error(errorMsg);
         }
 
         // ========== 查询 ==========
