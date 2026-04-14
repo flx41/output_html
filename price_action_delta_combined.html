@@ -216,6 +216,53 @@
             align-items: center;
             gap: 16px;
             border: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        /* 实时行情显示 */
+        .realtime-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .realtime-badge.up {
+            background: rgba(239, 83, 80, 0.15);
+            color: var(--up-color);
+        }
+        .realtime-badge.down {
+            background: rgba(38, 166, 154, 0.15);
+            color: var(--down-color);
+        }
+        .realtime-badge .pulse {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .stock-extra {
+            margin-left: auto;
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .stock-extra .item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .stock-extra .value {
+            font-family: 'Roboto Mono', monospace;
+            color: var(--text-primary);
         }
 
         .stock-name {
@@ -725,6 +772,15 @@
                 <span class="stock-name" id="stockName">SH.600519</span>
                 <span class="stock-price" id="stockPrice">--</span>
                 <span class="stock-change" id="stockChange">--</span>
+                <span class="realtime-badge" id="realtimeBadge" style="display:none">
+                    <span class="pulse"></span>
+                    <span id="realtimeStatus">实时</span>
+                </span>
+                <div class="stock-extra">
+                    <div class="item">成交额 <span class="value" id="realtimeAmount">--</span></div>
+                    <div class="item">换手率 <span class="value" id="realtimeTurnover">--</span></div>
+                    <div class="item">市盈率 <span class="value" id="realtimePE">--</span></div>
+                </div>
                 <span class="stock-meta" id="stockMeta">数据源: --</span>
             </div>
 
@@ -968,6 +1024,8 @@
         let candlestickSeries = null;
         let currentData = [];
         let gmmaSeries = [];
+        let currentCode = '600519';
+        let realtimeTimer = null;
 
         // 指标系列
         let macdSeries = { macd: null, signal: null, histogram: null };
@@ -2121,6 +2179,117 @@
             return 'sz';  // 默认深圳
         }
 
+        // ========== 实时行情接口 ==========
+        async function fetchRealtime(code) {
+            const prefix = getMarketPrefix(code);
+            const url = `https://qt.gtimg.cn/q=${prefix}${code}`;
+            
+            try {
+                const resp = await fetch(url);
+                const buffer = await resp.arrayBuffer();
+                const text = new TextDecoder('gbk').decode(buffer);
+                
+                // 解析字段
+                const fields = text.split('~');
+                if (fields.length < 40) throw new Error('数据格式异常');
+                
+                return {
+                    name: fields[1],
+                    code: fields[2],
+                    price: parseFloat(fields[3]),
+                    close: parseFloat(fields[4]),      // 昨收
+                    open: parseFloat(fields[5]),
+                    volume: parseInt(fields[6]),       // 成交量(手)
+                    outer: parseInt(fields[7]),        // 外盘
+                    inner: parseInt(fields[8]),        // 内盘
+                    high: parseFloat(fields[33]),
+                    low: parseFloat(fields[34]),
+                    change: parseFloat(fields[31]),
+                    changePct: parseFloat(fields[32]),
+                    amount: parseFloat(fields[37]),    // 成交额(万)
+                    turnover: parseFloat(fields[38]),  // 换手率
+                    pe: parseFloat(fields[39]),        // 市盈率
+                    time: fields[29],
+                };
+            } catch (e) {
+                console.error('[实时行情] 错误:', e);
+                throw e;
+            }
+        }
+
+        // 更新实时行情显示
+        function updateRealtimeDisplay(data) {
+            if (!data) return;
+            
+            // 更新价格
+            const priceEl = document.getElementById('stockPrice');
+            priceEl.textContent = data.price.toFixed(2);
+            priceEl.className = 'stock-price ' + (data.price >= data.close ? 'up' : 'down');
+            
+            // 更新涨跌幅
+            const changeEl = document.getElementById('stockChange');
+            const sign = data.change >= 0 ? '+' : '';
+            changeEl.textContent = `${sign}${data.change.toFixed(2)} (${sign}${data.changePct.toFixed(2)}%)`;
+            changeEl.className = 'stock-change ' + (data.change >= 0 ? 'up' : 'down');
+            
+            // 显示实时标识
+            const badge = document.getElementById('realtimeBadge');
+            badge.style.display = 'inline-flex';
+            badge.className = 'realtime-badge ' + (data.change >= 0 ? 'up' : 'down');
+            
+            // 更新额外信息
+            document.getElementById('realtimeAmount').textContent = (data.amount / 10000).toFixed(2) + '亿';
+            document.getElementById('realtimeTurnover').textContent = data.turnover.toFixed(2) + '%';
+            document.getElementById('realtimePE').textContent = data.pe.toFixed(2);
+        }
+
+        // 判断是否交易时间
+        function isTradingTime() {
+            const now = new Date();
+            const day = now.getDay();  // 0=周日, 6=周六
+            if (day === 0 || day === 6) return false;
+            
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            const time = hour * 100 + minute;
+            
+            // 9:30-11:30, 13:00-15:00
+            return (time >= 930 && time <= 1130) || (time >= 1300 && time <= 1500);
+        }
+
+        // 启动实时行情刷新
+        function startRealtimeRefresh(code) {
+            stopRealtimeRefresh();
+            currentCode = code;
+            
+            // 立即获取一次
+            fetchRealtime(code).then(updateRealtimeRefresh).catch(() => {});
+            
+            // 每10秒刷新（仅交易时间）
+            realtimeTimer = setInterval(() => {
+                if (isTradingTime()) {
+                    fetchRealtime(code).then(updateRealtimeRefresh).catch(() => {});
+                }
+            }, 10000);
+        }
+
+        // 停止实时刷新
+        function stopRealtimeRefresh() {
+            if (realtimeTimer) {
+                clearInterval(realtimeTimer);
+                realtimeTimer = null;
+            }
+        }
+
+        // 更新刷新状态
+        function updateRealtimeRefresh(data) {
+            updateRealtimeDisplay(data);
+            const statusEl = document.getElementById('realtimeStatus');
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+            statusEl.textContent = isTradingTime() ? `实时 ${timeStr}` : `收盘 ${timeStr}`;
+        }
+
         // 腾讯API（主要）
         async function fetchTencent(code, period = 'day') {
             const prefix = getMarketPrefix(code);
@@ -2329,10 +2498,18 @@
             btn.innerHTML = '<span class="loading-spinner"></span>';
 
             try {
-                const result = await fetchData(code, period);
+                // 同时获取K线数据和实时行情
+                const [result, realtime] = await Promise.all([
+                    fetchData(code, period),
+                    fetchRealtime(code).catch(() => null)
+                ]);
+                
                 currentData = result.data;
 
-                document.getElementById('stockName').textContent = `SH.${code}`;
+                // 更新股票名称（优先使用实时行情的名称）
+                const prefix = getMarketPrefix(code);
+                const marketName = prefix === 'sh' ? 'SH' : 'SZ';
+                document.getElementById('stockName').textContent = realtime ? `${marketName}.${code} ${realtime.name}` : `${marketName}.${code}`;
 
                 candlestickSeries.setData(result.data);
                 initGMMA();
@@ -2346,6 +2523,14 @@
                 const signal = generateSignal(patterns, gmma, result.data);
 
                 updateUI(result.data, patterns, gmma, signal, result.source);
+
+                // 更新实时行情显示
+                if (realtime) {
+                    updateRealtimeDisplay(realtime);
+                }
+
+                // 启动实时刷新
+                startRealtimeRefresh(code);
 
             } catch (e) {
                 alert('查询失败: ' + e.message);
