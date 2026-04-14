@@ -703,6 +703,7 @@
                 <div class="suggestions" id="suggestions"></div>
             </div>
             <div class="timeframe-tabs">
+                <button class="timeframe-tab" data-period="5">5分</button>
                 <button class="timeframe-tab" data-period="30">30分</button>
                 <button class="timeframe-tab" data-period="60">60分</button>
                 <button class="timeframe-tab active" data-period="day">日K</button>
@@ -2104,7 +2105,7 @@
             const prefix = code.startsWith('6') ? 'sh' : 'sz';
             // 分钟K线使用不同的参数格式
             let url;
-            if (period === '30' || period === '60') {
+            if (period === '5' || period === '30' || period === '60') {
                 url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},m${period},,,100`;
             } else {
                 url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},${period},,,100`;
@@ -2114,9 +2115,9 @@
             try {
                 const resp = await fetchWithProxy(url);
                 const data = await resp.json();
-                // 按周期取对应字段：day/week/month/m30/m60
+                // 按周期取对应字段：day/week/month/m5/m30/m60
                 let klines;
-                if (period === '30' || period === '60') {
+                if (period === '5' || period === '30' || period === '60') {
                     klines = data.data?.[`${prefix}${code}`]?.[`m${period}`] || [];
                 } else {
                     klines = data.data?.[`${prefix}${code}`]?.[period] || [];
@@ -2175,10 +2176,11 @@
                     }
                 };
                 
-                // 周期参数: 101=日K, 102=周K, 103=月K, 30=30分钟, 60=60分钟
+                // 周期参数: 101=日K, 102=周K, 103=月K, 5=5分钟, 30=30分钟, 60=60分钟
                 let klt;
                 if (period === 'week') klt = 102;
                 else if (period === 'month') klt = 103;
+                else if (period === '5') klt = 5;
                 else if (period === '30') klt = 30;
                 else if (period === '60') klt = 60;
                 else klt = 101;
@@ -2208,10 +2210,11 @@
         // 新浪API（备用）
         async function fetchSina(code, period = 'day') {
             const prefix = code.startsWith('6') ? 'sh' : 'sz';
-            // scale参数: 240=日K, 1680=周K, 7200=月K, 30=30分钟, 60=60分钟
+            // scale参数: 240=日K, 1680=周K, 7200=月K, 5=5分钟, 30=30分钟, 60=60分钟
             let scale;
             if (period === 'week') scale = 1680;
             else if (period === 'month') scale = 7200;
+            else if (period === '5') scale = 5;
             else if (period === '30') scale = 30;
             else if (period === '60') scale = 60;
             else scale = 240;
