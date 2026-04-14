@@ -2446,22 +2446,27 @@
         }
 
         async function fetchData(code, period = 'day') {
-            // 根据周期选择数据源
-            // 分钟线：优先东方财富，失败降级到腾讯（但腾讯分钟线可能无数据）
-            // 日/周/月：优先Tushare，其次东方财富，最后腾讯
+            /**
+             * 数据源配置（2026-04-14 固定）
+             * 
+             * 日/周/月K线：Tushare (主力) → 腾讯 web.ifzq (备用)
+             * 分钟线：东方财富 → 腾讯 (备用)
+             * 实时行情：腾讯 qt.gtimg.cn (单独调用)
+             */
             const isMinutePeriod = ['5', '30', '60'].includes(period);
             
             let sources;
             if (isMinutePeriod) {
+                // 分钟线：东方财富 → 腾讯
                 sources = [
-                    { name: '东方财富', fn: fetchEastMoney },  // JSONP，不受CORS限制
-                    { name: '腾讯', fn: fetchTencent },        // 备用（可能返回bad params）
+                    { name: '东方财富', fn: fetchEastMoney },
+                    { name: '腾讯', fn: fetchTencent },
                 ];
             } else {
+                // 日/周/月：Tushare → 腾讯
                 sources = [
-                    { name: 'Tushare', fn: fetchTushareDaily },  // Tushare数据源（推荐）
-                    { name: '东方财富', fn: fetchEastMoney },     // JSONP，不受CORS限制
-                    { name: '腾讯', fn: fetchTencent },           // 通过代理请求
+                    { name: 'Tushare', fn: fetchTushareDaily },
+                    { name: '腾讯', fn: fetchTencent },
                 ];
             }
             
