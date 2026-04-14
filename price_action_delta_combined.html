@@ -2471,24 +2471,36 @@
                     console.log(`[数据源] 尝试: ${s.name}`);
                     const data = await s.fn(code, period);
                     if (data && data.length > 0) {
-                        // 验证数据格式
-                        const validData = data.filter(d => 
-                            d.time && 
-                            typeof d.open === 'number' && !isNaN(d.open) &&
-                            typeof d.high === 'number' && !isNaN(d.high) &&
-                            typeof d.low === 'number' && !isNaN(d.low) &&
-                            typeof d.close === 'number' && !isNaN(d.close)
-                        );
+                        // 验证数据格式 - 严格过滤无效数据
+                        const validData = data.filter(d => {
+                            if (!d || !d.time) return false;
+                            if (typeof d.open !== 'number' || isNaN(d.open)) return false;
+                            if (typeof d.high !== 'number' || isNaN(d.high)) return false;
+                            if (typeof d.low !== 'number' || isNaN(d.low)) return false;
+                            if (typeof d.close !== 'number' || isNaN(d.close)) return false;
+                            if (d.high < d.low) return false;  // 高低价异常
+                            return true;
+                        }).map(d => ({
+                            time: d.time,
+                            open: Number(d.open),
+                            high: Number(d.high),
+                            low: Number(d.low),
+                            close: Number(d.close),
+                            volume: Number(d.volume) || 0
+                        }));
                         
                         if (validData.length < 10) {
                             throw new Error('有效数据不足');
                         }
                         
-                        // 按时间排序
+                        // 按时间排序并去重
                         validData.sort((a, b) => a.time - b.time);
+                        const uniqueData = validData.filter((d, i, arr) => 
+                            i === 0 || d.time !== arr[i-1].time
+                        );
                         
-                        console.log(`[数据源] ✅ ${s.name} 成功, ${validData.length}条`);
-                        return { data: validData, source: s.name };
+                        console.log(`[数据源] ✅ ${s.name} 成功, ${uniqueData.length}条`);
+                        return { data: uniqueData, source: s.name };
                     }
                 } catch (e) {
                     console.log(`[数据源] ❌ ${s.name} 失败: ${e.message}`);
