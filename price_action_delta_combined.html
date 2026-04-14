@@ -2055,11 +2055,11 @@
             
             let url;
             if (period === 'week') {
-                url = `${TUSHARE_API}/stock/weekly?code=${code}&limit=100`;
+                url = `${TUSHARE_API}/stock/weekly?code=${code}&limit=200`;
             } else if (period === 'month') {
-                url = `${TUSHARE_API}/stock/monthly?code=${code}&limit=100`;
+                url = `${TUSHARE_API}/stock/monthly?code=${code}&limit=200`;
             } else {
-                url = `${TUSHARE_API}/stock/daily?code=${code}&limit=100`;
+                url = `${TUSHARE_API}/stock/daily?code=${code}&limit=200`;
             }
             
             try {
@@ -2127,9 +2127,9 @@
             // 分钟K线使用不同的参数格式
             let url;
             if (period === '5' || period === '30' || period === '60') {
-                url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},m${period},,,100`;
+                url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},m${period},,,200`;
             } else {
-                url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},${period},,,100`;
+                url = `https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=${prefix}${code},${period},,,200`;
             }
             console.log('[腾讯] 请求:', url);
             
@@ -2208,7 +2208,7 @@
                 
                 const prefix = getMarketPrefix(code);
                 const secid = prefix === 'sh' ? `1.${code}` : `0.${code}`;
-                const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=100&cb=${callbackName}`;
+                const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=1&end=20500101&lmt=200&cb=${callbackName}`;
                 
                 console.log('[东方财富] 请求:', url);
                 
@@ -2240,7 +2240,7 @@
             else if (period === '30') scale = 30;
             else if (period === '60') scale = 60;
             else scale = 240;
-            const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=${scale}&ma=no&datalen=100`;
+            const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=${prefix}${code}&scale=${scale}&ma=no&datalen=200`;
             
             try {
                 const resp = await fetchWithProxy(url);
