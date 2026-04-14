@@ -615,6 +615,79 @@
             border-color: var(--accent-blue);
             color: white;
         }
+
+        /* 拖拽调整高度的分隔条 */
+        .resize-handle {
+            height: 6px;
+            background: var(--border-color);
+            cursor: ns-resize;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .resize-handle:hover {
+            background: var(--accent-blue);
+        }
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 2px;
+            background: var(--text-muted);
+            border-radius: 1px;
+        }
+        .resize-handle:hover::after {
+            background: white;
+        }
+
+        /* 浮动信息框 */
+        .crosshair-tooltip {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(30, 34, 45, 0.95);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 12px;
+            font-family: 'Roboto Mono', monospace;
+            color: var(--text-primary);
+            z-index: 20;
+            pointer-events: none;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+        }
+        .crosshair-tooltip.show {
+            display: block;
+        }
+        .crosshair-tooltip .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        .crosshair-tooltip .tooltip-label {
+            color: var(--text-secondary);
+            margin-right: 12px;
+        }
+        .crosshair-tooltip .tooltip-value {
+            font-weight: 500;
+        }
+        .crosshair-tooltip .tooltip-value.up {
+            color: var(--up-color);
+        }
+        .crosshair-tooltip .tooltip-value.down {
+            color: var(--down-color);
+        }
+        .crosshair-tooltip .tooltip-header {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -671,8 +744,12 @@
                     <button class="control-btn active" id="toggleDelta">Delta效率</button>
                 </div>
                 <div id="chart"></div>
+                <div id="mainTooltip" class="crosshair-tooltip"></div>
+                <div class="resize-handle" id="resizeIndicator"></div>
                 <div id="indicatorChart"></div>
+                <div class="resize-handle" id="resizeAmount"></div>
                 <div id="amountChart" style="height: 80px;"></div>
+                <div class="resize-handle" id="resizeDelta"></div>
                 <div id="deltaChart" style="height: 100px;"></div>
             </div>
         </div>
@@ -1139,6 +1216,139 @@
             new ResizeObserver(() => {
                 deltaChart.applyOptions({ width: deltaContainer.clientWidth, height: deltaContainer.clientHeight });
             }).observe(deltaContainer);
+
+            // ========== 十字光标事件处理 ==========
+            // 主图十字光标移动事件 - 更新 tooltip
+            chart.subscribeCrosshairMove(param => {
+                // 更新 tooltip
+                if (param.time && param.point) {
+                    updateMainTooltip(param);
+                } else {
+                    hideMainTooltip();
+                }
+            });
+
+            // 子图十字光标移动事件 - 同步 tooltip
+            [indicatorChart, amountChart, deltaChart].forEach(subChart => {
+                subChart.subscribeCrosshairMove(param => {
+                    // 子图也显示 tooltip
+                    if (param.time && param.point) {
+                        updateMainTooltip(param);
+                    } else {
+                        hideMainTooltip();
+                    }
+                });
+            });
+
+            // ========== Tooltip 更新函数 ==========
+            function updateMainTooltip(param) {
+                const tooltip = document.getElementById('mainTooltip');
+                if (!param.time || !param.point) {
+                    tooltip.classList.remove('show');
+                    return;
+                }
+
+                // 查找对应的K线数据
+                const candleData = candlestickSeries.data();
+                const candle = candleData.find(d => d.time === param.time);
+                if (!candle) {
+                    tooltip.classList.remove('show');
+                    return;
+                }
+
+                // 计算涨跌幅
+                const idx = candleData.findIndex(d => d.time === param.time);
+                const prevCandle = idx > 0 ? candleData[idx - 1] : null;
+                const change = prevCandle ? ((candle.close - prevCandle.close) / prevCandle.close * 100).toFixed(2) : '0.00';
+                const isUp = candle.close >= candle.open;
+                const changeClass = parseFloat(change) >= 0 ? 'up' : 'down';
+
+                // 格式化时间
+                const date = new Date(candle.time * 1000);
+                const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+                // 构建 tooltip 内容
+                let html = `<div class="tooltip-header">${dateStr}</div>`;
+                html += `<div class="tooltip-row"><span class="tooltip-label">开</span><span class="tooltip-value ${candle.open >= candle.close ? 'down' : 'up'}">${candle.open.toFixed(2)}</span></div>`;
+                html += `<div class="tooltip-row"><span class="tooltip-label">高</span><span class="tooltip-value up">${candle.high.toFixed(2)}</span></div>`;
+                html += `<div class="tooltip-row"><span class="tooltip-label">低</span><span class="tooltip-value down">${candle.low.toFixed(2)}</span></div>`;
+                html += `<div class="tooltip-row"><span class="tooltip-label">收</span><span class="tooltip-value ${isUp ? 'up' : 'down'}">${candle.close.toFixed(2)}</span></div>`;
+                html += `<div class="tooltip-row"><span class="tooltip-label">涨跌</span><span class="tooltip-value ${changeClass}">${change >= 0 ? '+' : ''}${change}%</span></div>`;
+
+                // 添加成交额信息
+                if (candle.volume) {
+                    const avgPrice = (candle.high + candle.low) / 2;
+                    const amount = (candle.volume * avgPrice / 100000000).toFixed(2);
+                    html += `<div class="tooltip-row"><span class="tooltip-label">额</span><span class="tooltip-value">${amount}亿</span></div>`;
+                }
+
+                tooltip.innerHTML = html;
+                tooltip.classList.add('show');
+            }
+
+            function hideMainTooltip() {
+                document.getElementById('mainTooltip').classList.remove('show');
+            }
+
+            // ========== 拖拽调整高度 ==========
+            function initResizeHandle(handleId, topElement, bottomElement, minTopHeight = 100, minBottomHeight = 60) {
+                const handle = document.getElementById(handleId);
+                if (!handle) return;
+
+                let startY = 0;
+                let startTopHeight = 0;
+                let startBottomHeight = 0;
+
+                handle.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    startY = e.clientY;
+                    startTopHeight = topElement.offsetHeight;
+                    startBottomHeight = bottomElement.offsetHeight;
+                    document.body.style.cursor = 'ns-resize';
+                    document.body.style.userSelect = 'none';
+
+                    const onMouseMove = (e) => {
+                        const delta = e.clientY - startY;
+                        const newTopHeight = Math.max(minTopHeight, startTopHeight + delta);
+                        const newBottomHeight = Math.max(minBottomHeight, startBottomHeight - delta);
+                        
+                        topElement.style.height = newTopHeight + 'px';
+                        topElement.style.flex = 'none';
+                        bottomElement.style.height = newBottomHeight + 'px';
+                        bottomElement.style.flex = 'none';
+
+                        // 触发图表尺寸更新
+                        if (topElement.id === 'indicatorChart' && indicatorChart) {
+                            indicatorChart.applyOptions({ width: topElement.clientWidth, height: newTopHeight });
+                        } else if (topElement.id === 'amountChart' && amountChart) {
+                            amountChart.applyOptions({ width: topElement.clientWidth, height: newTopHeight });
+                        }
+                        if (bottomElement.id === 'amountChart' && amountChart) {
+                            amountChart.applyOptions({ width: bottomElement.clientWidth, height: newBottomHeight });
+                        } else if (bottomElement.id === 'deltaChart' && deltaChart) {
+                            deltaChart.applyOptions({ width: bottomElement.clientWidth, height: newBottomHeight });
+                        }
+                    };
+
+                    const onMouseUp = () => {
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+            }
+
+            // 初始化拖拽调整
+            const indicatorEl = document.getElementById('indicatorChart');
+            const amountEl = document.getElementById('amountChart');
+            const deltaEl = document.getElementById('deltaChart');
+
+            initResizeHandle('resizeIndicator', indicatorEl, amountEl, 100, 60);
+            initResizeHandle('resizeAmount', amountEl, deltaEl, 60, 60);
         }
 
         // ========== EMA计算 ==========
