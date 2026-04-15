@@ -316,7 +316,7 @@
 
         #chart {
             width: 100%;
-            flex: 2;
+            flex: 1;
         }
 
         #indicatorChart {
@@ -807,10 +807,12 @@
                 <div class="resize-handle" id="resizeIndicator" style="display: none;"></div>
                 <div id="indicatorChart" style="display: none;"></div>
 
-                <div class="resize-handle" id="resizeAmount"></div>
-                <div id="amountChart" style="height: 120px;"></div>
-                <div class="resize-handle" id="resizeDelta"></div>
-                <div id="deltaChart" style="height: 150px;"></div>
+                <div class="sub-chart-area" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="resize-handle" id="resizeAmount"></div>
+                    <div id="amountChart" style="height: 120px;"></div>
+                    <div class="resize-handle" id="resizeDelta"></div>
+                    <div id="deltaChart" style="height: 150px;"></div>
+                </div>
             </div>
         </div>
 
