@@ -2487,10 +2487,18 @@
                 ];
             } else {
                 // 日/周/月：Tushare → 腾讯
-                sources = [
-                    { name: 'Tushare', fn: fetchTushareDaily },
-                    { name: '腾讯', fn: fetchTencent },
-                ];
+                // 检查是否在GitHub Pages上，如果是则跳过Tushare（CORS限制）
+                const isGitHubPages = window.location.hostname.includes('github.io');
+                if (isGitHubPages) {
+                    sources = [
+                        { name: '腾讯', fn: fetchTencent },
+                    ];
+                } else {
+                    sources = [
+                        { name: 'Tushare', fn: fetchTushareDaily },
+                        { name: '腾讯', fn: fetchTencent },
+                    ];
+                }
             }
             
             let lastError = null;
