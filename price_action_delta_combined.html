@@ -323,7 +323,8 @@
             width: 100%;
             flex: 1;
             border-top: 1px solid var(--border-color);
-            display: none;
+            height: 0;
+            overflow: hidden;
         }
 
         /* 图表控制栏 */
@@ -803,6 +804,8 @@
                 </div>
                 <div id="chart"></div>
                 <div id="mainTooltip" class="crosshair-tooltip"></div>
+                <div class="resize-handle" id="resizeIndicator" style="display: none;"></div>
+                <div id="indicatorChart" style="display: none;"></div>
 
                 <div class="resize-handle" id="resizeAmount"></div>
                 <div id="amountChart" style="height: 80px;"></div>
