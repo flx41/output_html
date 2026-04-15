@@ -945,6 +945,25 @@
                     </div>
                 </div>
             </div>
+            <!-- D趋势详解 -->
+            <div class="panel-section">
+                <div class="panel-title">D趋势详解</div>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                    <p><strong>D趋势</strong>是基于价格行为和成交量的Delta趋势分析。</p>
+                    <p><strong>计算公式：</strong></p>
+                    <p>Delta = |收盘价 - 开盘价| / (最高价 - 最低价) × 成交量 × 方向</p>
+                    <p>方向：阳线=1，阴线=-1</p>
+                    <p><strong>Delta效率：</strong></p>
+                    <p>效率 = |Delta| / (成交额 / 10000)</p>
+                    <p>成交额 = 成交量 × (最高价 + 最低价) / 2</p>
+                    <p><strong>趋势判断：</strong></p>
+                    <p>总Delta > 0：多头主导 ↑</p>
+                    <p>总Delta < 0：空头主导 ↓</p>
+                    <p><strong>效率评级：</strong></p>
+                    <p>高效率：当前效率 > 平均效率 × 1.5</p>
+                    <p>低效率：当前效率 < 平均效率 × 0.5</p>
+                </div>
+            </div>
         </div>
     </div>
 
