@@ -169,7 +169,7 @@ klines = get_tencent_kline('600519', 'day', 100, 'qfq')
 
 ## 八、对现有项目的价值
 
-### stock.html
+### digdog.html (原 stock.html) v0.0.1
 - 可以获取前复权K线，价格更准确
 - 一个接口同时获取K线+实时行情
 - 减少请求数量

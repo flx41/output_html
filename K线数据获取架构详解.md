@@ -1,7 +1,7 @@
 # 现行 HTML K线数据获取架构详解
 
 > 更新日期：2026-04-15
-> 来源文件：stock.html
+> 来源文件：digdog.html (原 stock.html) v0.0.1
 
 ---
 
